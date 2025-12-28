@@ -4,10 +4,13 @@ Class Header Generator
 Generates modernized C++ header files for classes, combining struct definitions
 with method signatures, using LLM processing.
 """
-import re
 import json
+import logging
+import re
 from typing import List, Dict, Optional, Set, Any
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 class ClassHeaderGenerator:
@@ -216,19 +219,29 @@ private:
 """
     
     def __init__(self, db_handler, llm_client=None, debug_dir: Optional[Path] = None):
-        """
-        Initialize the header generator.
-        
+        """Initialize the header generator with database and optional LLM client.
+
+        Sets up the generator with required dependencies for type lookups and
+        optional LLM processing. The LLM client can be set later if not provided
+        at initialization.
+
         Args:
-            db_handler: DatabaseHandler instance for type lookups
-            llm_client: Optional LLM client for processing (can be set later)
-            debug_dir: Optional directory for debug output
+            db_handler: DatabaseHandler instance for type lookups and storage.
+            llm_client: Optional LLM client for processing. Must have a 'generate'
+                method or be callable. Can be set later via the `llm` attribute.
+            debug_dir: Optional directory path for debug output files. When set,
+                prompts and responses are saved for each processed class.
+
+        Example:
+            >>> db = DatabaseHandler('types.db')
+            >>> generator = ClassHeaderGenerator(db)
+            >>> generator.llm = LLMClient()  # Set LLM client later
         """
         self.db = db_handler
         self.llm = llm_client
         self.debug_dir = Path(debug_dir) if debug_dir else None
         self.dependency_analyzer = None  # Set externally if needed
-        
+
         # Debug tracking
         self._last_analysis_prompt: Optional[str] = None
         self._last_analysis: Optional[str] = None
@@ -271,13 +284,32 @@ private:
             types_path.write_text(json.dumps(self._last_types, indent=2), encoding='utf-8')
     
     def gather_class_info(self, class_name: str) -> Dict:
-        """
-        Gather all information needed to generate a class header.
-        
-        Returns dict with:
-        - struct: The struct definition from DB
-        - methods: List of methods belonging to this class
-        - vtable: VTable code if present
+        """Collect struct definition and method information for a class.
+
+        Queries the database for the struct definition, all associated methods,
+        and any nested types belonging to the specified class. This information
+        is used as input for LLM-based header generation.
+
+        Args:
+            class_name: The fully qualified name of the class to gather info for.
+                Can include namespace (e.g., "Turbine::PlayerModule").
+
+        Returns:
+            A dictionary containing:
+                - class_name (str): The input class name.
+                - struct (tuple): The struct definition row from the database,
+                    or None if not found.
+                - methods (list): List of method rows belonging to this class.
+                - vtable (str): VTable code if present, otherwise None.
+                - nested (list): List of dicts for nested types, each containing
+                    'name', 'struct', and 'methods' keys.
+
+        Example:
+            >>> info = generator.gather_class_info("PlayerModule")
+            >>> info['class_name']
+            'PlayerModule'
+            >>> len(info['methods'])
+            15
         """
         # Get struct definition
         struct_rows = self.db.get_type_by_name(class_name, 'struct')
@@ -306,48 +338,135 @@ private:
             'nested': nested_info
         }
     
-    def is_template_instantiation(self, class_name: str) -> bool:
-        """Check if a class name looks like a template instantiation"""
-        return '<' in class_name and class_name.endswith('>')
+    def is_template_instantiation(self, type_name: str) -> bool:
+        """Check if a type name represents a template instantiation.
 
-    def get_template_base_name(self, class_name: str) -> str:
-        """Extract the base name from a template instantiation (e.g. List<int> -> List)"""
-        if '<' in class_name:
-            return class_name.split('<')[0].strip()
-        return class_name
+        Determines whether the given type name follows the pattern of a C++
+        template instantiation (e.g., "List<int>", "Map<string, int>").
+
+        Args:
+            type_name: The type name to check for template instantiation pattern.
+
+        Returns:
+            True if the type name contains angle brackets indicating a template
+            instantiation, False otherwise.
+
+        Example:
+            >>> generator.is_template_instantiation("List<int>")
+            True
+            >>> generator.is_template_instantiation("PlayerModule")
+            False
+        """
+        return '<' in type_name and type_name.endswith('>')
+
+    def get_template_base_name(self, type_name: str) -> str:
+        """Extract the base template name from a template instantiation.
+
+        Strips template parameters from a type name to get the underlying
+        template class name. If the type is not a template instantiation,
+        returns the original name unchanged.
+
+        Args:
+            type_name: The type name to extract the base name from.
+                Can be a template instantiation like "List<int>" or a
+                regular type name like "PlayerModule".
+
+        Returns:
+            The base template name without template parameters.
+            For "List<int>", returns "List".
+            For "Map<string, int>", returns "Map".
+            For non-template types, returns the input unchanged.
+
+        Example:
+            >>> generator.get_template_base_name("List<int>")
+            'List'
+            >>> generator.get_template_base_name("PlayerModule")
+            'PlayerModule'
+        """
+        if '<' in type_name:
+            return type_name.split('<')[0].strip()
+        return type_name
 
     def extract_method_signature(self, method_row) -> str:
-        """Extract a clean method signature from a method row"""
+        """Extract a clean method signature from a method definition row.
+
+        Parses a method row from the database and extracts just the method
+        signature, cleaning up decompiler-specific artifacts like calling
+        conventions (__thiscall, __cdecl, etc.).
+
+        Args:
+            method_row: A tuple from the database containing method information.
+                Expected format: (id, name, full_name, definition, namespace, parent, ...).
+                The definition at index 3 contains the full method body.
+
+        Returns:
+            A cleaned method signature string ending with a semicolon.
+            Decompiler calling conventions are removed, and only the first
+            line (signature) is extracted from the definition.
+
+        Example:
+            >>> method = (1, 'Update', 'Player::Update', 'void __thiscall Update() { ... }', ...)
+            >>> generator.extract_method_signature(method)
+            'void Update();'
+        """
         # method_row format: (id, name, full_name, definition, namespace, parent, ...)
         definition = method_row[3] if len(method_row) > 3 else ""
-        
+
         # Extract just the first line (signature)
         lines = definition.split('\n')
         signature = lines[0] if lines else ""
-        
+
         # Clean up decompiler artifacts
         for modifier in ['__cdecl', '__stdcall', '__thiscall', '__userpurge',
                         '__usercall', '__fastcall', '__noreturn']:
             signature = signature.replace(modifier, '')
-        
+
         # Remove body brace if present
         signature = signature.split('{')[0].strip()
         if not signature.endswith(';'):
             signature += ';'
-            
+
         return signature
     
     def find_type_references(self, class_info: Dict) -> Set[str]:
-        """Find all type names referenced in the class definition and methods"""
+        """Find all type names referenced in the class definition and methods.
+
+        Scans the struct definition and method signatures to identify all
+        referenced types that may need to be included or forward-declared
+        in the generated header.
+
+        Uses the dependency analyzer if available for more accurate extraction,
+        otherwise falls back to simple regex pattern matching for capitalized
+        identifiers.
+
+        Args:
+            class_info: A dictionary containing class information as returned
+                by gather_class_info(). Must contain 'class_name' and optionally
+                'struct' and 'methods' keys.
+
+        Returns:
+            A set of type names referenced in the class code. The class's own
+            name is excluded from the results. Types are extracted from:
+            - Member variable declarations
+            - Method parameter types
+            - Method return types
+            - Base class references
+
+        Example:
+            >>> info = generator.gather_class_info("PlayerModule")
+            >>> refs = generator.find_type_references(info)
+            >>> 'GameObject' in refs
+            True
+        """
         references = set()
-        
+
         # Use dependency analyzer if available
         if self.dependency_analyzer:
             struct = class_info.get('struct')
             if struct:
                 code = struct[5] if len(struct) > 5 else ""
                 references.update(self.dependency_analyzer.extract_type_references(code))
-            
+
             # Check method signatures too
             for method in class_info.get('methods', []):
                 definition = method[3] if len(method) > 3 else ""
@@ -362,28 +481,68 @@ private:
                 pattern = re.compile(r'\b([A-Z][A-Za-z0-9_]*)\b')
                 matches = pattern.findall(code)
                 references.update(matches)
-        
+
         # Remove the class itself
         references.discard(class_info['class_name'])
-        
+
         return references
 
-    def _get_type_filepath(self, full_name: str) -> str:
-        """Get the expected header file path for a type"""
-        if '::' in full_name:
+    def _get_type_filepath(self, type_name: str) -> str:
+        """Get the expected include path for a type.
+
+        Converts a fully qualified type name to its expected header file path
+        based on namespace conventions. Namespaced types use the first
+        namespace component as a directory prefix.
+
+        Args:
+            type_name: The fully qualified type name, potentially including
+                namespace separators (e.g., "Turbine::Debug::Assert").
+
+        Returns:
+            The expected relative header file path for the type.
+            For "Turbine::Debug::Assert", returns "Turbine/Assert.h".
+            For non-namespaced types like "PlayerModule", returns "PlayerModule.h".
+
+        Example:
+            >>> generator._get_type_filepath("Turbine::Debug::Assert")
+            'Turbine/Assert.h'
+            >>> generator._get_type_filepath("SmartBuffer")
+            'SmartBuffer.h'
+        """
+        if '::' in type_name:
             # Turbine::Debug::Assert -> Turbine/Assert.h
-            parts = full_name.split('::')
+            parts = type_name.split('::')
             return f"{parts[0]}/{parts[-1]}.h"
-        return f"{full_name}.h"
+        return f"{type_name}.h"
     
     def get_reference_context(self, type_names: Set[str], max_types: int = 10) -> str:
-        """
-        Get definitions for referenced types to provide as context.
-        Checks processed types first, falls back to raw.
-        
+        """Get type definitions for referenced types to provide as LLM context.
+
+        Looks up each referenced type in the database and builds a context
+        string containing their definitions. Prefers modernized (processed)
+        definitions when available, falling back to raw decompiled code.
+
+        Each type definition includes a comment indicating its expected
+        include path, which the LLM can use to generate correct #include
+        directives.
+
         Args:
-            type_names: Set of type names to look up
-            max_types: Maximum number of types to include (to limit context size)
+            type_names: Set of type names to look up in the database.
+            max_types: Maximum number of types to include in the context.
+                Limits context size to avoid exceeding LLM token limits.
+                Defaults to 10.
+
+        Returns:
+            A formatted string containing type definitions, each prefixed
+            with comments indicating the type name, whether it's modernized
+            or raw, and its expected include path. Returns empty string if
+            no types are found.
+
+        Example:
+            >>> refs = {'SmartBuffer', 'TResult'}
+            >>> context = generator.get_reference_context(refs)
+            >>> '// Reference: SmartBuffer' in context
+            True
         """
         context_parts = []
         included = 0
@@ -410,8 +569,34 @@ private:
         return "\n\n".join(context_parts)
     
     def analyze_class(self, class_name: str) -> Optional[str]:
-        """
-        Perform initial analysis of the class and extract all referenced types.
+        """Analyze a class structure and extract all referenced types using LLM.
+
+        Performs an initial analysis pass on the class using the LLM to identify
+        all type references in the struct definition, vtable, and methods. This
+        analysis is more thorough than regex-based extraction and can identify
+        types in complex contexts.
+
+        The analysis combines LLM-extracted types with regex-based extraction
+        for comprehensive coverage.
+
+        Args:
+            class_name: The name of the class to analyze.
+
+        Returns:
+            A JSON string containing analysis results with the following keys:
+                - analysis: The raw LLM response.
+                - referenced_types: Combined list of all discovered types.
+                - llm_extracted_types: Types found by the LLM.
+                - regex_extracted_types: Types found by regex patterns.
+            Returns None if no LLM client is set or the class has no struct
+            definition.
+
+        Example:
+            >>> analysis = generator.analyze_class("PlayerModule")
+            >>> import json
+            >>> data = json.loads(analysis)
+            >>> 'referenced_types' in data
+            True
         """
         if not self.llm:
             return None
@@ -519,9 +704,39 @@ Example Output:
         
         self._last_analysis = json.dumps(analysis_result, indent=2)
         return json.dumps(analysis_result)
+
     def build_prompt(self, class_info: Dict, reference_context: str = "", analysis: str = "",
                      method_definitions: List[str] = None, is_template: bool = False) -> str:
-        """Build the LLM prompt for header generation"""
+        """Build the LLM prompt for C++ header generation.
+
+        Constructs a complete prompt for the LLM including the class definition,
+        method signatures or definitions, vtable information, nested types,
+        and reference context for dependent types. Selects appropriate few-shot
+        examples based on whether the class is a template.
+
+        Args:
+            class_info: Dictionary containing class information as returned by
+                gather_class_info(). Must include 'class_name' and 'struct'.
+            reference_context: Optional string containing definitions of
+                referenced types for context. Generated by get_reference_context().
+            analysis: Optional analysis string (currently unused in prompt).
+            method_definitions: Optional list of full method definition strings.
+                If provided, these are included instead of just signatures.
+                Required for template classes that need inline definitions.
+            is_template: Whether this class is a template instantiation.
+                Affects which few-shot example is included in the prompt.
+
+        Returns:
+            A complete prompt string ready to send to the LLM for header
+            generation.
+
+        Example:
+            >>> info = generator.gather_class_info("PlayerModule")
+            >>> context = generator.get_reference_context({'GameObject'})
+            >>> prompt = generator.build_prompt(info, context)
+            >>> 'Generate a clean, modern C++ header' in prompt
+            True
+        """
         struct = class_info.get('struct')
         struct_code = struct[5] if struct and len(struct) > 5 else ""
         
@@ -574,19 +789,45 @@ Referenced Types (for context only, do not redefine):
         
         few_shot = self.FEW_SHOT_TEMPLATE if is_template else self.FEW_SHOT_CLASS
         prompt += f"\n{few_shot}"
-        
+
         return prompt
+
     def generate_header(self, class_name: str, save_to_db: bool = True, analysis: str = None) -> Optional[str]:
-        """
-        Generate a modernized header for the given class.
-        
+        """Generate a modernized C++ header for the specified class.
+
+        Main entry point for header generation. Gathers class information,
+        finds type references, builds the LLM prompt, calls the LLM, and
+        optionally stores the result in the database.
+
+        The generation process:
+        1. Gathers struct definition and methods from database
+        2. Finds all referenced types (via regex and optional analysis)
+        3. Gets context definitions for referenced types
+        4. Builds prompt with appropriate few-shot examples
+        5. Calls LLM to generate modernized header
+        6. Optionally saves result to database
+
         Args:
-            class_name: Name of the class to process
-            save_to_db: Whether to save the result to the database
-            analysis: Optional analysis string from analyze_class
-            
+            class_name: Name of the class to generate a header for.
+                Can include namespace (e.g., "Turbine::PlayerModule").
+            save_to_db: Whether to save the generated header to the database.
+                Defaults to True.
+            analysis: Optional JSON analysis string from analyze_class().
+                If provided, type references are extracted from it to
+                supplement regex-based discovery.
+
         Returns:
-            Generated header code, or None if generation failed
+            The generated C++ header code as a string, or None if:
+            - No LLM client is configured
+            - No struct definition exists for the class
+
+        Raises:
+            ValueError: If no LLM client is set.
+
+        Example:
+            >>> header = generator.generate_header("PlayerModule")
+            >>> header.startswith('#pragma once')
+            True
         """
         if not self.llm:
             raise ValueError("LLM client not set. Set it via generator.llm = client")
@@ -595,7 +836,7 @@ Referenced Types (for context only, do not redefine):
         class_info = self.gather_class_info(class_name)
         
         if not class_info.get('struct'):
-            print(f"Warning: No struct definition found for {class_name}")
+            logger.warning(f"No struct definition found for {class_name}")
             return None
         
         # Start with references found via regex patterns
@@ -648,20 +889,39 @@ Referenced Types (for context only, do not redefine):
         if header and save_to_db:
             struct = class_info['struct']
             original_code = struct[5] if struct and len(struct) > 5 else ""
+            engine_name = self.llm.name if self.llm and hasattr(self.llm, 'name') else "lm-studio"
             self.db.store_processed_type(
                 name=class_name,
                 type_kind='struct',
                 original_code=original_code,
                 processed_header=header,
-                dependencies=list(all_references)
+                dependencies=list(all_references),
+                engine_used=engine_name
             )
         
         return header
-    
+
     def _call_llm(self, prompt: str) -> str:
-        """
-        Call the LLM with the given prompt.
-        Override this method or set self.llm_generate for custom LLM integration.
+        """Call the LLM with the given prompt and return the response.
+
+        Wrapper method that handles different LLM client interfaces. The client
+        can either have a 'generate' method or be directly callable.
+
+        This method can be overridden in subclasses for custom LLM integration
+        or retry logic.
+
+        Args:
+            prompt: The complete prompt string to send to the LLM.
+
+        Returns:
+            The LLM's response text.
+
+        Raises:
+            NotImplementedError: If the LLM client doesn't have a 'generate'
+                method and isn't callable.
+
+        Example:
+            >>> response = generator._call_llm("Generate a header for...")
         """
         if hasattr(self.llm, 'generate'):
             return self.llm.generate(prompt)
@@ -670,19 +930,39 @@ Referenced Types (for context only, do not redefine):
         else:
             raise NotImplementedError("LLM client must have a 'generate' method or be callable")
     
-    def write_header_file(self, class_name: str, header_code: str, 
+    def write_header_file(self, class_name: str, header_code: str,
                           output_dir: Path, namespace: str = None) -> Path:
-        """
-        Write the generated header to a file.
-        
+        """Write the generated header code to a file on disk.
+
+        Creates the appropriate directory structure based on namespace and
+        writes the header content to a .h file. Directories are created
+        as needed.
+
+        The output path follows the convention:
+        - With namespace: output_dir/include/{namespace}/{class_name}.h
+        - Without namespace: output_dir/include/{class_name}.h
+
         Args:
-            class_name: Name of the class
-            header_code: Generated header content
-            output_dir: Base output directory
-            namespace: Optional namespace for subdirectory organization
-            
+            class_name: Name of the class (used as the filename).
+            header_code: The generated header content to write.
+            output_dir: Base output directory. The 'include' subdirectory
+                will be created under this path.
+            namespace: Optional namespace for subdirectory organization.
+                Namespace separators (::) are converted to directory
+                separators.
+
         Returns:
-            Path to the written file
+            Path object pointing to the written header file.
+
+        Example:
+            >>> path = generator.write_header_file(
+            ...     "PlayerModule",
+            ...     header_code,
+            ...     Path("output"),
+            ...     namespace="Turbine"
+            ... )
+            >>> path
+            PosixPath('output/include/Turbine/PlayerModule.h')
         """
         # Build output path
         if namespace:

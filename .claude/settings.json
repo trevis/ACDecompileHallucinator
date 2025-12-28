@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python *)",
+      "Bash(git *)",
+      "Bash(gh *)",
+      "Read(**)",
+      "Write(**)",
+      "Edit(**)"
+    ],
+    "deny": [
+      "Bash(rm -rf /)",
+      "Bash(*--force-with-lease*)",
+      "Write(.env*)",
+      "Write(*credentials*)"
+    ]
+  },
+  "env": {
+    "PYTHONPATH": "."
+  }
+}

@@ -1,7 +1,10 @@
+import logging
 from dataclasses import dataclass
 from typing import Optional, Dict, List
 from pathlib import Path
 from .constants import should_ignore_global_method, should_ignore_class_method, should_ignore_class
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -25,7 +28,15 @@ class Method:
     
     @property
     def safe_name(self) -> str:
-        """Returns a filesystem-safe name"""
+        """Returns a filesystem-safe version of the method name.
+
+        Transforms the full name by replacing characters that are problematic
+        for filesystems (::, <, >, commas, spaces) with underscores. Also
+        removes vtbl suffixes and truncates to 100 characters if needed.
+
+        Returns:
+            A sanitized name safe for use in file paths.
+        """
         # Replace problematic characters that can cause long filenames
         safe_name = self.full_name.replace('::', '__').replace('_vtbl', '')
         # Handle template characters that can cause extremely long names
@@ -37,21 +48,57 @@ class Method:
     
     @property
     def is_global(self) -> str:
+        """Checks if this method is a global function.
+
+        A method is considered global if it has no namespace separator (::)
+        in its full name, indicating it is not a class member.
+
+        Returns:
+            True if the method is a global function, False if it belongs
+            to a class or namespace.
+        """
         return "::" not in self.full_name
     
     @property
     def simple_name(self) -> str:
-        """Returns just the func name without namespace"""
+        """Returns the method name without namespace or vtbl suffix.
+
+        Returns:
+            The base method name with any _vtbl suffix removed.
+        """
         return self.name.replace('_vtbl', '')
     
     def clean_definition(self, def_line: str) -> str:
-        """Remove modifiers from struct definition"""
+        """Remove calling convention modifiers from a function definition.
+
+        Strips IDA-specific calling convention modifiers like __cdecl,
+        __thiscall, __userpurge, etc. that are artifacts of decompilation.
+
+        Args:
+            def_line: The raw function definition line from decompiled code.
+
+        Returns:
+            The cleaned definition line with modifiers removed.
+        """
         for modifier in self.FUNC_MODIFIERS:
             def_line = def_line.replace(modifier, '')
         return def_line
     
     def get_out_file(self, src_path: str, structs_dict: Dict[str, any] = None) -> Path:
-        """Return the output file path for this method"""
+        """Determine the output file path for this method.
+
+        Computes the appropriate output path based on the method's parent
+        class and namespace. Methods are grouped by their parent class
+        to avoid extremely long filenames from template instantiations.
+
+        Args:
+            src_path: Base path for output files.
+            structs_dict: Optional dictionary mapping struct names to Struct
+                objects. Used to determine output file for class methods.
+
+        Returns:
+            Path object pointing to the output .cpp file location.
+        """
         # Use the parent class name for the file, not the full method name
         # This prevents extremely long filenames with complex template instantiations
         if self.parent and self.parent in structs_dict:
@@ -60,13 +107,15 @@ class Method:
         elif self.parent:
             # Use parent class name for the file, not the full method name
             # Clean the parent name to make it filesystem-safe
-            safe_parent = self.parent.replace('::', '__').replace('<', '_').replace('>', '_').replace(',', '_').replace(' ', '_')
+            safe_parent = self.parent.replace('::', '__').replace('<', '_').replace('>', '_').replace(',', '_').replace(' ', '_').replace('*', '_').replace('?', '_').replace('"', '_').replace('|', '_')
             # Truncate if too long
             if len(safe_parent) > 100:
                 safe_parent = safe_parent[:100]
             
             if self.namespace:
-                namespace_dir = src_path / self.namespace.split('::')[0]
+                # Sanitize namespace for Windows filesystem
+                safe_ns = self.namespace.split('::')[0].replace('<', '_').replace('>', '_').replace(',', '_').replace(' ', '_').replace('*', '_').replace('?', '_').replace('"', '_').replace('|', '_')
+                namespace_dir = src_path / safe_ns
                 namespace_dir.mkdir(exist_ok=True)
                 out_file = namespace_dir / f"{safe_parent}.cpp"
             else:
@@ -77,17 +126,19 @@ class Method:
                 out_file = src_path / f"{self.safe_name.split('__')[0]}.cpp"
             else:
                 # Clean namespace for filename
-                safe_namespace = self.namespace.replace('::', '__').replace('<', '_').replace('>', '_').replace(',', '_').replace(' ', '_')
+                safe_namespace = self.namespace.replace('::', '__').replace('<', '_').replace('>', '_').replace(',', '_').replace(' ', '_').replace('*', '_').replace('?', '_').replace('"', '_').replace('|', '_')
                 # Truncate if too long
                 if len(safe_namespace) > 10:
                     safe_namespace = safe_namespace[:100]
                     
-                namespace_dir = src_path / self.namespace.split('::')[0]
+                # Sanitize namespace directory for Windows filesystem
+                safe_ns_dir = self.namespace.split('::')[0].replace('<', '_').replace('>', '_').replace(',', '_').replace(' ', '_').replace('*', '_').replace('?', '_').replace('"', '_').replace('|', '_')
+                namespace_dir = src_path / safe_ns_dir
                 namespace_dir.mkdir(exist_ok=True)
                 out_file = namespace_dir / f"{safe_namespace}.cpp"
         else:
             # For global functions, use safe_name but truncate if needed
-            safe_name = self.safe_name.replace('<', '_').replace('>', '_').replace(',', '_').replace(' ', '_')
+            safe_name = self.safe_name.replace('<', '_').replace('>', '_').replace(',', '_').replace(' ', '_').replace('*', '_').replace('?', '_').replace('"', '_').replace('|', '_')
             if len(safe_name) > 100:
                 safe_name = safe_name[:100]
             out_file = src_path / f"{safe_name}.cpp"
@@ -95,17 +146,45 @@ class Method:
         return out_file
 
     def write_to_file(self, src_path: str, structs: Dict[str, any]):
-        """Write a single struct to its appropriate file"""
+        """Write the method definition to its output file.
+
+        Appends the method with its offset comment to the appropriate output
+        file. If the method has a parent class, also registers the method
+        with that struct's methods list.
+
+        Args:
+            src_path: Base path for output files.
+            structs: Dictionary mapping struct names to Struct objects,
+                used for determining output file location and registering
+                methods with their parent structs.
+        """
         out_file = self.get_out_file(src_path, structs)
 
         if self.parent and self.parent in structs:
             structs[self.parent].methods.append(self)
-        
+
         with open(out_file, 'a') as f:
             f.write(f"// Function Offset: 0x{self.offset}\n")
             f.write(f"{self.definition}\n\n")
 
     def extract_func_name(self, def_line: str):
+        """Extract function name, return type, parent class, and namespace.
+
+        Parses a function signature to extract its components. Handles
+        special cases like operator overloads, destructors, and template
+        functions. Updates this Method instance with the extracted data.
+
+        Args:
+            def_line: The function definition line (e.g., "int Foo::bar(int x)").
+
+        Returns:
+            A tuple of (simple_name, None) where simple_name is the function
+            name without namespace. The second element is always None for
+            compatibility.
+
+        Raises:
+            ValueError: If no opening parenthesis is found in the signature.
+        """
         def_line = self.clean_definition(def_line)
         def_line = def_line.replace(' * *', '**')
         def_line = def_line.replace(' * ', '* ')
@@ -158,7 +237,7 @@ class Method:
             self.return_type = self.return_type + '*'
 
         if self.return_type == "":
-            print("Bad Return?", def_line)
+            logger.warning(f"Bad return type: {def_line}")
 
         self.full_name = self.name
 
@@ -180,11 +259,28 @@ class Method:
         return self.simple_name, None
 
     def parse(self, line: str, lines: List[str], i: int) -> int:
-        """Parse func definition"""
+        """Parse a function definition from source lines.
+
+        Extracts the function offset, name, body, and metadata from the
+        source lines. Updates this Method instance with the parsed data
+        and determines if the method should be ignored based on naming
+        conventions.
+
+        Args:
+            line: The function header line containing the offset.
+            lines: List of all source lines being parsed.
+            i: Current line index in the lines list.
+
+        Returns:
+            A tuple of (new_index, simple_name, method) where new_index is
+            the line index after parsing, simple_name is the function name
+            (or None if parsing failed), and method is the populated Method
+            instance (or None if parsing failed).
+        """
         func_buffer = []
         parts = line.split(' ')
         if len(parts) < 2:
-            print("Bad Len?", line)
+            logger.warning(f"Bad line format: {line}")
         else:
             self.offset = line.split(' ')[1].strip('()')
 

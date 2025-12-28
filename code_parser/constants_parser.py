@@ -15,8 +15,14 @@ class ConstantsParser:
     """Parses constants and type definitions from debug dump files"""
     
     def __init__(self, db_handler: DatabaseHandler):
+        """Initialize the ConstantsParser with a database handler.
+
+        Args:
+            db_handler: DatabaseHandler instance for storing parsed constants
+                and type definitions.
+        """
         self.db = db_handler
-        
+
         # Regex patterns
         # (0004E4) S_CONSTANT: Type:             0x107B, Value: 1, PTRUE
         self.constant_pattern = re.compile(
@@ -34,7 +40,15 @@ class ConstantsParser:
         )
 
     def parse_file(self, file_path: str):
-        """Parse the debug file and store results in database"""
+        """Parse a debug dump file and store results in the database.
+
+        Parses constants (S_CONSTANT), local data (S_LDATA32), and type
+        definitions from a debug dump file. Results are stored in the
+        database via the db_handler.
+
+        Args:
+            file_path: Path to the debug dump file to parse.
+        """
         path = Path(file_path)
         if not path.exists():
             logger.error(f"Constants file not found: {path}")

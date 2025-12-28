@@ -8,15 +8,29 @@ from .method import Method
 
 
 class DatabaseHandler:
-    """Handles SQLite database operations for storing enums, structs, and processed output"""
-    
+    """Handles SQLite database operations for storing enums, structs, and processed output."""
+
     def __init__(self, db_path: str):
+        """Initialize the database handler with the specified database path.
+
+        Creates the parent directory if it doesn't exist and initializes
+        the database schema.
+
+        Args:
+            db_path: Path to the SQLite database file.
+        """
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.init_db()
     
     def init_db(self):
-        """Initialize the database with the required table structure"""
+        """Initialize the database with the required table structure.
+
+        Creates all necessary tables (types, methods, processed_types,
+        processed_methods, llm_token_usage, constants, debug_types) and
+        their indexes if they don't already exist. Also performs any
+        necessary schema migrations.
+        """
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row  # Enable dict-like access
             cursor = conn.cursor()
@@ -110,6 +124,18 @@ class DatabaseHandler:
             except sqlite3.OperationalError:
                 pass  # Already exists
             
+            # Migration: Add engine_used column to processed_types (defaults to lm-studio for legacy)
+            try:
+                cursor.execute("ALTER TABLE processed_types ADD COLUMN engine_used TEXT DEFAULT 'lm-studio'")
+            except sqlite3.OperationalError:
+                pass  # Already exists
+            
+            # Migration: Add engine_used column to processed_methods (defaults to lm-studio for legacy)
+            try:
+                cursor.execute("ALTER TABLE processed_methods ADD COLUMN engine_used TEXT DEFAULT 'lm-studio'")
+            except sqlite3.OperationalError:
+                pass  # Already exists
+            
             # Create constants table
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS constants (
@@ -136,6 +162,26 @@ class DatabaseHandler:
                 )
             ''')
             
+            # Create error_patterns table (for Error Memory feature)
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS error_patterns (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    category TEXT NOT NULL,
+                    pattern_hash TEXT NOT NULL,
+                    pattern_signature TEXT,
+                    original_snippet TEXT NOT NULL,
+                    failed_output TEXT,
+                    correct_output TEXT,
+                    error_description TEXT NOT NULL,
+                    method_name TEXT,
+                    class_name TEXT,
+                    occurrence_count INTEGER DEFAULT 1,
+                    first_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(pattern_hash)
+                )
+            ''')
+            
             # Create indexes for faster queries on types table
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_type_name ON types(type, name)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_namespace ON types(namespace)')
@@ -153,10 +199,19 @@ class DatabaseHandler:
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_processed_method_parent ON processed_methods(parent_class)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_processed_method_is_processed ON processed_methods(is_processed)')
             
+            # Create indexes for error_patterns table
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_error_category ON error_patterns(category)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_error_signature ON error_patterns(pattern_signature)')
+            
             conn.commit()
     
     def store_enum(self, enum: Enum):
-        """Store an enum in the database"""
+        """Store an enum in the database.
+
+        Args:
+            enum: The Enum object containing name, namespace, definition,
+                and metadata to store.
+        """
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             
@@ -175,7 +230,14 @@ class DatabaseHandler:
             conn.commit()
     
     def store_struct(self, struct: Struct, vtable_code: Optional[str] = None):
-        """Store a struct in the database, with optional vtable code"""
+        """Store a struct in the database.
+
+        Args:
+            struct: The Struct object containing name, namespace, parent,
+                definition, and metadata to store.
+            vtable_code: Optional vtable definition code for classes with
+                virtual methods.
+        """
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             
@@ -198,28 +260,50 @@ class DatabaseHandler:
             conn.commit()
     
     def get_all_types(self):
-        """Retrieve all stored types from the database"""
+        """Retrieve all stored types from the database.
+
+        Returns:
+            List of tuples containing all type records, ordered by type
+            and name.
+        """
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute('SELECT * FROM types ORDER BY type, name')
             return cursor.fetchall()
     
     def get_enums(self):
-        """Retrieve all stored enums from the database"""
+        """Retrieve all stored enums from the database.
+
+        Returns:
+            List of tuples containing all enum records, ordered by name.
+        """
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute('SELECT * FROM types WHERE type = "enum" ORDER BY name')
             return cursor.fetchall()
     
     def get_structs(self):
-        """Retrieve all stored structs from the database"""
+        """Retrieve all stored structs from the database.
+
+        Returns:
+            List of tuples containing all struct records, ordered by name.
+        """
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute('SELECT * FROM types WHERE type = "struct" ORDER BY name')
             return cursor.fetchall()
     
     def store_method(self, method: Method):
-        """Store a method in the database"""
+        """Store a method in the database.
+
+        Automatically determines if the method is global (no :: in name)
+        and stores all method metadata including namespace, parent class,
+        return type, and binary offset.
+
+        Args:
+            method: The Method object containing name, definition, and
+                metadata to store.
+        """
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             
@@ -245,36 +329,28 @@ class DatabaseHandler:
             
             conn.commit()
 
-    def get_all_types(self):
-        """Retrieve all stored types from the database"""
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute('SELECT * FROM types ORDER BY type, name')
-            return cursor.fetchall()
-    
-    def get_enums(self):
-        """Retrieve all stored enums from the database"""
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute('SELECT * FROM types WHERE type = "enum" ORDER BY name')
-            return cursor.fetchall()
-    
-    def get_structs(self):
-        """Retrieve all stored structs from the database"""
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute('SELECT * FROM types WHERE type = "struct" ORDER BY name')
-            return cursor.fetchall()
-    
     def get_methods(self):
-        """Retrieve all stored methods from the database"""
+        """Retrieve all stored methods from the database.
+
+        Returns:
+            List of tuples containing all method records, ordered by name.
+        """
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute('SELECT * FROM methods ORDER BY name')
             return cursor.fetchall()
     
     def get_type_by_name(self, name: str, type_filter: Optional[str] = None):
-        """Retrieve a specific type by name, optionally filtered by type"""
+        """Retrieve a specific type by name.
+
+        Args:
+            name: The name of the type to retrieve.
+            type_filter: Optional filter to restrict results to a specific
+                type kind (e.g., 'enum', 'struct').
+
+        Returns:
+            List of tuples containing matching type records, ordered by type.
+        """
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             
@@ -286,21 +362,46 @@ class DatabaseHandler:
             return cursor.fetchall()
     
     def get_method_by_name(self, name: str):
-        """Retrieve a specific method by name"""
+        """Retrieve methods by their simple name.
+
+        Args:
+            name: The simple method name (without class prefix).
+
+        Returns:
+            List of tuples containing matching method records, ordered by name.
+        """
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute('SELECT * FROM methods WHERE name = ? ORDER BY name', (name,))
             return cursor.fetchall()
     
     def get_method_by_full_name(self, full_name: str):
-        """Retrieve a specific method by full name"""
+        """Retrieve a specific method by its fully qualified name.
+
+        Args:
+            full_name: The fully qualified method name (e.g., 'Class::method').
+
+        Returns:
+            List of tuples containing matching method records, ordered by name.
+        """
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute('SELECT * FROM methods WHERE full_name = ? ORDER BY name', (full_name,))
             return cursor.fetchall()
 
     def get_methods_by_parent(self, parent: str) -> List[Tuple]:
-        """Retrieve all methods belonging to a specific parent class"""
+        """Retrieve all methods belonging to a specific parent class.
+
+        Handles both simple class names and fully qualified names with
+        namespaces (e.g., 'Namespace::Class').
+
+        Args:
+            parent: The parent class name, optionally with namespace prefix.
+
+        Returns:
+            List of tuples containing matching non-ignored method records,
+            ordered by name.
+        """
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             
@@ -317,7 +418,15 @@ class DatabaseHandler:
             return cursor.fetchall()
 
     def get_nested_types(self, parent_name: str) -> List[Tuple]:
-        """Retrieve all types nested within a specific parent class/namespace"""
+        """Retrieve all types nested within a specific parent class or namespace.
+
+        Args:
+            parent_name: The name of the parent class or namespace.
+
+        Returns:
+            List of tuples containing matching non-ignored type records,
+            ordered by name.
+        """
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             # Find types where namespace matches parent_name
@@ -325,7 +434,12 @@ class DatabaseHandler:
             return cursor.fetchall()
 
     def get_all_parent_classes(self) -> List[str]:
-        """Get all unique parent class names from methods"""
+        """Get all unique parent class names from methods.
+
+        Returns:
+            List of unique parent class names from non-ignored methods,
+            ordered alphabetically.
+        """
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute('SELECT DISTINCT parent FROM methods WHERE parent IS NOT NULL AND is_ignored = 0 ORDER BY parent')
@@ -337,8 +451,22 @@ class DatabaseHandler:
     
     def store_processed_type(self, name: str, type_kind: str, original_code: str,
                              processed_header: str, processed_source: str = None,
-                             dependencies: List[str] = None):
-        """Store a processed type in the database"""
+                             dependencies: List[str] = None,
+                             engine_used: str = "lm-studio"):
+        """Store a processed type in the database.
+
+        Uses INSERT OR REPLACE to update existing records. Sets is_processed
+        to 1 and records the current timestamp.
+
+        Args:
+            name: The fully qualified type name.
+            type_kind: The type kind (e.g., 'enum', 'struct').
+            original_code: The original decompiled code.
+            processed_header: The modernized header code.
+            processed_source: Optional modernized source implementation.
+            dependencies: Optional list of type names this type depends on.
+            engine_used: Name of LLM engine that processed this type.
+        """
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             deps_json = json.dumps(dependencies) if dependencies else None
@@ -346,14 +474,22 @@ class DatabaseHandler:
             cursor.execute('''
                 INSERT OR REPLACE INTO processed_types 
                 (name, type, original_code, processed_header, processed_source, 
-                 dependencies, is_processed, processed_at)
-                VALUES (?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
+                 dependencies, is_processed, processed_at, engine_used)
+                VALUES (?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, ?)
             ''', (name, type_kind, original_code, processed_header, 
-                  processed_source, deps_json))
+                  processed_source, deps_json, engine_used))
             conn.commit()
 
     def get_processed_type(self, name: str) -> Optional[Dict[str, Any]]:
-        """Retrieve a processed type by name"""
+        """Retrieve a processed type by name.
+
+        Args:
+            name: The fully qualified type name.
+
+        Returns:
+            Dictionary containing the processed type record with parsed
+            dependencies, or None if not found.
+        """
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
@@ -362,14 +498,25 @@ class DatabaseHandler:
             if row:
                 result = dict(row)
                 if result.get('dependencies'):
-                    result['dependencies'] = json.loads(result['dependencies'])
+                    try:
+                        result['dependencies'] = json.loads(result['dependencies'])
+                    except json.JSONDecodeError:
+                        # Legacy format: comma-separated string
+                        result['dependencies'] = [d.strip() for d in result['dependencies'].split(',') if d.strip()]
                 return result
             return None
 
     def get_type_with_fallback(self, name: str) -> Tuple[Optional[Dict], bool]:
-        """
-        Get type definition, checking processed first, then raw.
-        Returns (type_dict, is_processed) tuple.
+        """Get type definition, checking processed first, then raw.
+
+        Args:
+            name: The type name to look up.
+
+        Returns:
+            Tuple of (type_dict, is_processed) where type_dict contains
+            the type information and is_processed indicates whether it
+            came from processed_types (True) or raw types (False).
+            Returns (None, False) if the type is not found.
         """
         # Check processed first
         processed = self.get_processed_type(name)
@@ -384,7 +531,16 @@ class DatabaseHandler:
         return None, False
 
     def get_unprocessed_types(self, type_filter: Optional[str] = None) -> List[Tuple]:
-        """Get all types that haven't been processed yet"""
+        """Get all types that haven't been processed yet.
+
+        Args:
+            type_filter: Optional filter to restrict results to a specific
+                type kind (e.g., 'enum', 'struct').
+
+        Returns:
+            List of tuples containing unprocessed, non-ignored type records,
+            ordered by name.
+        """
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             
@@ -407,7 +563,15 @@ class DatabaseHandler:
             return cursor.fetchall()
 
     def is_type_processed(self, name: str) -> bool:
-        """Check if a type has been processed"""
+        """Check if a type has been processed.
+
+        Args:
+            name: The type name to check.
+
+        Returns:
+            True if the type exists in processed_types with is_processed=1,
+            False otherwise.
+        """
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute('SELECT is_processed FROM processed_types WHERE name = ?', (name,))
@@ -419,8 +583,21 @@ class DatabaseHandler:
     # ───────────────────────────────────────────────────────────────────────
     
     def store_processed_method(self, method: Method, processed_code: str,
-                               dependencies: List[str] = None):
-        """Store a processed method in the database"""
+                               dependencies: List[str] = None,
+                               engine_used: str = "lm-studio"):
+        """Store a processed method in the database.
+
+        Uses INSERT OR REPLACE to update existing records. Constructs the
+        fully qualified parent name from namespace and parent. Sets
+        is_processed to 1 and records the current timestamp.
+
+        Args:
+            method: The Method object containing metadata about the method.
+            processed_code: The modernized method implementation code.
+            dependencies: Optional list of type/method names this method
+                depends on.
+            engine_used: Name of LLM engine that processed this method.
+        """
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             deps_json = json.dumps(dependencies) if dependencies else None
@@ -433,14 +610,22 @@ class DatabaseHandler:
             cursor.execute('''
                 INSERT OR REPLACE INTO processed_methods 
                 (name, full_name, parent_class, original_code, processed_code,
-                 dependencies, offset, is_processed, processed_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
+                 dependencies, offset, is_processed, processed_at, engine_used)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, ?)
             ''', (method.name, method.full_name, parent_name,
-                  method.definition, processed_code, deps_json, method.offset))
+                  method.definition, processed_code, deps_json, method.offset, engine_used))
             conn.commit()
 
     def get_processed_method(self, full_name: str) -> Optional[Dict[str, Any]]:
-        """Retrieve a processed method by full name"""
+        """Retrieve a processed method by its fully qualified name.
+
+        Args:
+            full_name: The fully qualified method name (e.g., 'Class::method').
+
+        Returns:
+            Dictionary containing the processed method record with parsed
+            dependencies, or None if not found.
+        """
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
@@ -449,12 +634,24 @@ class DatabaseHandler:
             if row:
                 result = dict(row)
                 if result.get('dependencies'):
-                    result['dependencies'] = json.loads(result['dependencies'])
+                    try:
+                        result['dependencies'] = json.loads(result['dependencies'])
+                    except json.JSONDecodeError:
+                        # Legacy format: comma-separated string
+                        result['dependencies'] = [d.strip() for d in result['dependencies'].split(',') if d.strip()]
                 return result
             return None
 
     def get_processed_methods_by_parent(self, parent_class: str) -> List[Dict[str, Any]]:
-        """Get all processed methods for a specific parent class"""
+        """Get all processed methods for a specific parent class.
+
+        Args:
+            parent_class: The fully qualified parent class name.
+
+        Returns:
+            List of dictionaries containing processed method records,
+            ordered by method name.
+        """
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
@@ -468,7 +665,19 @@ class DatabaseHandler:
             return [dict(row) for row in cursor.fetchall()]
 
     def get_unprocessed_methods(self, parent_class: Optional[str] = None) -> List[Tuple]:
-        """Get all methods that haven't been processed yet"""
+        """Get all methods that haven't been processed yet.
+
+        Handles both simple class names and fully qualified names with
+        namespaces.
+
+        Args:
+            parent_class: Optional parent class name to filter by. If None,
+                returns all unprocessed methods.
+
+        Returns:
+            List of tuples containing unprocessed, non-ignored method records,
+            ordered by parent and name.
+        """
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             
@@ -503,7 +712,15 @@ class DatabaseHandler:
             return cursor.fetchall()
 
     def is_method_processed(self, full_name: str) -> bool:
-        """Check if a method has been processed"""
+        """Check if a method has been processed.
+
+        Args:
+            full_name: The fully qualified method name (e.g., 'Class::method').
+
+        Returns:
+            True if the method exists in processed_methods with is_processed=1,
+            False otherwise.
+        """
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute('SELECT is_processed FROM processed_methods WHERE full_name = ?', (full_name,))
@@ -511,7 +728,17 @@ class DatabaseHandler:
             return bool(row and row[0])
 
     def get_processing_stats(self) -> Dict[str, Any]:
-        """Get statistics about processing progress"""
+        """Get statistics about processing progress.
+
+        Returns:
+            Dictionary containing:
+                - total_types: Total number of non-ignored types
+                - processed_types: Number of processed types
+                - total_methods: Total number of non-ignored methods
+                - processed_methods: Number of processed methods
+                - types_progress: String formatted as 'processed/total'
+                - methods_progress: String formatted as 'processed/total'
+        """
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             
@@ -539,9 +766,14 @@ class DatabaseHandler:
             }
 
     def clear_processed_class(self, class_name: str):
-        """
-        Clear processed status for a class and its methods.
-        Used when --force is specified.
+        """Clear processed status for a class and its methods.
+
+        Deletes the class from processed_types and all its methods from
+        processed_methods. Used when --force is specified to reprocess
+        a class.
+
+        Args:
+            class_name: The fully qualified class name to clear.
         """
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
@@ -562,9 +794,19 @@ class DatabaseHandler:
     # Constants & Debug Types Operations
     # ───────────────────────────────────────────────────────────────────────
 
-    def store_constant(self, name: str, value: str, type_id: str = None, 
-                      is_ldata: bool = False, address: str = None):
-        """Store a constant in the database"""
+    def store_constant(self, name: str, value: str, type_id: str = None,
+                       is_ldata: bool = False, address: str = None):
+        """Store a constant in the database.
+
+        Uses INSERT OR REPLACE to update existing records.
+
+        Args:
+            name: The constant name.
+            value: The constant value (hex or decimal string).
+            type_id: Optional type identifier for the constant.
+            is_ldata: Whether this is an LDATA section constant.
+            address: Optional memory address of the constant.
+        """
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute('''
@@ -574,9 +816,19 @@ class DatabaseHandler:
             ''', (name, value, type_id, is_ldata, address))
             conn.commit()
 
-    def store_debug_type(self, type_id: str, length: int, leaf_type: str, 
-                        description: str, raw_data: str = None):
-        """Store a debug type definition"""
+    def store_debug_type(self, type_id: str, length: int, leaf_type: str,
+                         description: str, raw_data: str = None):
+        """Store a debug type definition from PDB/debug info.
+
+        Uses INSERT OR REPLACE to update existing records.
+
+        Args:
+            type_id: The unique type identifier from debug info.
+            length: The length/size of the type in bytes.
+            leaf_type: The leaf type classification (e.g., 'LF_CLASS').
+            description: Human-readable description of the type.
+            raw_data: Optional raw debug data for the type.
+        """
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute('''
@@ -587,7 +839,12 @@ class DatabaseHandler:
             conn.commit()
 
     def get_constants(self) -> List[Dict[str, Any]]:
-        """Get all constants"""
+        """Get all constants from the database.
+
+        Returns:
+            List of dictionaries containing all constant records,
+            ordered by name.
+        """
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
@@ -595,7 +852,14 @@ class DatabaseHandler:
             return [dict(row) for row in cursor.fetchall()]
     
     def get_constant_by_name(self, name: str) -> Optional[Dict[str, Any]]:
-        """Get constant by name"""
+        """Get a constant by its name.
+
+        Args:
+            name: The constant name to look up.
+
+        Returns:
+            Dictionary containing the constant record, or None if not found.
+        """
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
@@ -604,7 +868,14 @@ class DatabaseHandler:
             return dict(row) if row else None
 
     def get_debug_type(self, type_id: str) -> Optional[Dict[str, Any]]:
-        """Get debug type by ID"""
+        """Get a debug type by its ID.
+
+        Args:
+            type_id: The debug type identifier to look up.
+
+        Returns:
+            Dictionary containing the debug type record, or None if not found.
+        """
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
@@ -612,8 +883,21 @@ class DatabaseHandler:
             row = cursor.fetchone()
             return dict(row) if row else None
 
-    def store_token_usage(self, prompt: str, prompt_tokens: int, completion_tokens: int, total_tokens: int, model: str = "local-model", request_time: float = None):
-        """Store LLM token usage in the database"""
+    def store_token_usage(self, prompt: str, prompt_tokens: int,
+                          completion_tokens: int, total_tokens: int,
+                          model: str = "local-model", request_time: float = None):
+        """Store LLM token usage in the database.
+
+        Tracks token consumption for monitoring and cost analysis.
+
+        Args:
+            prompt: The prompt text sent to the LLM.
+            prompt_tokens: Number of tokens in the prompt.
+            completion_tokens: Number of tokens in the completion.
+            total_tokens: Total tokens used (prompt + completion).
+            model: The model identifier used for the request.
+            request_time: Optional request duration in seconds.
+        """
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute('''

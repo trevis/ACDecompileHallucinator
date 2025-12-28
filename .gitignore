@@ -6,3 +6,24 @@ acclient.c
 acclient.txt
 .venv
 __pycache__
+
+# Claude Code local settings (not shared)
+.claude/settings.local.json
+CLAUDE.local.md
+
+# Serena memories (session-specific)
+.serena/
+
+# Database files
+*.db
+
+# Temporary files
+*.pyc
+*.pyo
+.DS_Store
+*.swp
+*.swo
+
+# Source files (large decompiled code)
+acclient.zip
+acclient/

@@ -1,12 +1,13 @@
-import os
-import shutil
-import re
-from dataclasses import dataclass
-from typing import Optional, Dict, List
-from pathlib import Path
+"""
+Filter rules for ignoring types and functions during processing.
+
+This module defines prefixes, suffixes, and whitelists that control which
+decompiled entities are processed or skipped.
+"""
+from typing import List
 
 
-IGNORE_STRUCT_PREFIXES = [
+IGNORE_STRUCT_PREFIXES: List[str] = [
     '_', 'tag', '$', 'ATL', 'WinInet', 'Windows', 'std', 'SCARD', 'SB', 'RPC',
     'OPENCARD', 'MSXML', 'IMedia', 'IMem', 'IXML', 'ISynchronize', 'IRpc', 'IOle',
     'IPersist', 'IPin', 'IPipe', 'IProperty', 'IQua', 'IQeue', 'IRe', 'IOp', 'IMe',

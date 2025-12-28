@@ -1,0 +1,6 @@
+# LLM Processing Dependencies
+# Required for LM Studio OpenAI-compatible API
+openai>=1.0.0
+
+# Progress bars for processing feedback
+tqdm>=4.60.0

@@ -1,3 +1,4 @@
+import logging
 import re
 from typing import List, Dict
 from .struct import Struct
@@ -5,10 +6,19 @@ from .enum import Enum
 from .method import Method
 from .offset_mapper import OffsetMapper
 
+logger = logging.getLogger(__name__)
+
 class SourceParser:
     """Parses C++ source files and extracts globals / methods"""
     
     def __init__(self, source_file: str, offset_mapper: OffsetMapper):
+        """Initialize the SourceParser with a source file and offset mapper.
+
+        Args:
+            source_file: Path to the C++ source file to parse.
+            offset_mapper: OffsetMapper instance for resolving binary offsets
+                to source file names.
+        """
         self.source_file = source_file
         self.methods: Dict[str, Method] = {}
         self.offset_mapper: OffsetMapper = offset_mapper
@@ -21,7 +31,15 @@ class SourceParser:
         }
     
     def read_file_safely(self) -> str:
-        """Read file with multiple encoding attempts"""
+        """Read the source file with encoding fallback.
+
+        Attempts to read the file using multiple encodings in order:
+        utf-8, latin-1, cp1252. Falls back to utf-8 with replacement
+        characters if all encodings fail.
+
+        Returns:
+            The file contents as a decoded string.
+        """
         with open(self.source_file, 'rb') as f:
             raw = f.read()
         for encoding in ['utf-8', 'latin-1', 'cp1252']:
@@ -32,7 +50,13 @@ class SourceParser:
         return raw.decode('utf-8', errors='replace')
     
     def parse(self):
-        """Main parsing method"""
+        """Parse the source file and extract method definitions.
+
+        Reads the source file and extracts all function/method definitions.
+        Each method is identified by its offset marker (//----- OFFSET).
+        Results are stored in the methods dictionary and statistics are
+        updated for both global and class methods.
+        """
         content = self.read_file_safely()
         lines = content.splitlines()
         i = 0
@@ -66,9 +90,13 @@ class SourceParser:
                 pass
             
             i += 1
-        print("Found", found_funcs, "funcs")
-    
+        logger.info(f"Found {found_funcs} functions")
+
     def print_stats(self):
-        """Print statistics about parsed types"""
-        print(f"Global Methods found: {self.stats['global_methods_found'] - self.stats['global_methods_ignored']} (ignored: {self.stats['global_methods_ignored']})")
-        print(f"Class Methods found: {self.stats['class_methods_found'] - self.stats['class_methods_ignored']} (ignored: {self.stats['class_methods_ignored']})")
+        """Print statistics about parsed methods to the logger.
+
+        Logs counts of global and class methods found during parsing,
+        including how many of each were ignored.
+        """
+        logger.info(f"Global Methods found: {self.stats['global_methods_found'] - self.stats['global_methods_ignored']} (ignored: {self.stats['global_methods_ignored']})")
+        logger.info(f"Class Methods found: {self.stats['class_methods_found'] - self.stats['class_methods_ignored']} (ignored: {self.stats['class_methods_ignored']})")

@@ -4,10 +4,13 @@ Dependency Analyzer
 Extracts type references from code, builds dependency graphs, and provides
 topological sorting for proper processing order.
 """
+import logging
 import re
 from typing import List, Set, Dict, Tuple, Optional
 from collections import defaultdict
 from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -34,11 +37,17 @@ class DependencyAnalyzer:
     """
     
     def __init__(self, db_handler):
+        """Initialize the dependency analyzer with a database handler.
+
+        Args:
+            db_handler: Database handler instance for accessing type information.
+                Must provide get_structs() and get_enums() methods.
+        """
         self.db = db_handler
         self.type_nodes: Dict[str, TypeNode] = {}
         self.dependencies: Dict[str, Set[str]] = defaultdict(set)
         self.known_types: Set[str] = set()
-        
+
         # Regex patterns for type extraction
         self.patterns = {
             # Base class: "class Foo : public Bar" or "struct Foo : Bar"
@@ -85,7 +94,12 @@ class DependencyAnalyzer:
         }
     
     def load_known_types(self):
-        """Load all known type names from the database"""
+        """Load all known type names from the database.
+
+        Populates the known_types set with struct and enum names from the
+        database. For namespaced types, both the full name and simple name
+        are added (e.g., both "Namespace::Class" and "Class").
+        """
         # Load structs
         structs = self.db.get_structs()
         for s in structs:
@@ -104,9 +118,18 @@ class DependencyAnalyzer:
                 self.known_types.add(name.split('::')[-1])
     
     def extract_type_references(self, code: str) -> Set[str]:
-        """
-        Extract all type names referenced in the code.
-        Returns a set of type names after filtering out primitives and unknowns.
+        """Extract all type names referenced in the given code.
+
+        Uses regex pattern matching to find type references in base class
+        declarations, pointer/reference types, template parameters, member
+        declarations, function parameters, and return types.
+
+        Args:
+            code: C++ source code to analyze for type references.
+
+        Returns:
+            Set of type names found in the code, filtered to exclude
+            primitives, standard library types, and invalid names.
         """
         references = set()
         
@@ -124,7 +147,21 @@ class DependencyAnalyzer:
         return references
     
     def _is_valid_type(self, type_name: str) -> bool:
-        """Check if a type name is valid and should be tracked"""
+        """Check if a type name is valid and should be tracked.
+
+        A type is considered valid if it:
+        - Is not empty
+        - Is not a primitive or common standard library type
+        - Is not all lowercase (likely a variable name)
+        - Starts with uppercase or contains namespace separator (::)
+
+        Args:
+            type_name: The type name string to validate.
+
+        Returns:
+            True if the type name should be tracked as a dependency,
+            False otherwise.
+        """
         if not type_name:
             return False
         
@@ -143,7 +180,16 @@ class DependencyAnalyzer:
         return True
     
     def build_dependency_graph(self):
-        """Build the dependency graph from all types in the database"""
+        """Build the complete dependency graph from all types in the database.
+
+        Loads all structs and enums from the database, extracts type references
+        from their code, and builds a graph where edges represent dependencies.
+        Ignored types are excluded from the graph.
+
+        The graph is stored in:
+        - type_nodes: Maps type names to TypeNode objects with metadata.
+        - dependencies: Maps type names to sets of their dependency names.
+        """
         self.load_known_types()
         
         # Process structs
@@ -196,7 +242,16 @@ class DependencyAnalyzer:
             self.dependencies[name] = refs
     
     def find_cycles(self) -> List[Set[str]]:
-        """Find all cycles in the dependency graph using Tarjan's algorithm"""
+        """Find all circular dependencies in the graph using Tarjan's algorithm.
+
+        Identifies strongly connected components (SCCs) with more than one node,
+        which represent circular dependency groups that must be handled specially
+        during processing.
+
+        Returns:
+            List of sets, where each set contains type names that form a
+            circular dependency group.
+        """
         index_counter = [0]
         stack = []
         lowlinks = {}
@@ -237,9 +292,15 @@ class DependencyAnalyzer:
         return sccs
     
     def topological_sort(self) -> List[str]:
-        """
-        Return types in topological order (dependencies first).
-        Handles cycles by grouping them together.
+        """Sort types in topological order with dependencies first.
+
+        Uses Kahn's algorithm to produce an ordering where each type appears
+        after all of its dependencies. Circular dependencies are detected and
+        their members are grouped together in the output.
+
+        Returns:
+            List of type names in processing order, where dependencies
+            appear before the types that depend on them.
         """
         if not self.dependencies:
             self.build_dependency_graph()
@@ -314,9 +375,15 @@ class DependencyAnalyzer:
         return result
     
     def get_processing_order(self) -> List[Tuple[str, str]]:
-        """
-        Return (type_name, type_kind) tuples in processing order.
-        Dependencies come before dependents.
+        """Get the recommended order for processing types.
+
+        Computes a topological ordering of types and returns tuples containing
+        both the type name and its kind (struct, enum, class). This is the
+        primary method for determining processing order during modernization.
+
+        Returns:
+            List of (type_name, type_kind) tuples in dependency order,
+            where dependencies appear before dependents.
         """
         if not self.type_nodes:
             self.build_dependency_graph()
@@ -331,15 +398,127 @@ class DependencyAnalyzer:
         
         return result
     
-    def get_type_dependencies(self, type_name: str) -> Set[str]:
-        """Get the direct dependencies of a specific type"""
+    def get_dependency_levels(self) -> Dict[int, List[Tuple[str, str]]]:
+        """Group types by their dependency depth level.
+
+        Types at the same level have no inter-dependencies and can be
+        processed in parallel. Level 0 contains types with no dependencies,
+        level N contains types whose dependencies are all at levels < N.
+
+        This enables parallel processing where:
+        - All types at level 0 are processed in parallel
+        - Wait for level 0 to complete
+        - All types at level 1 are processed in parallel
+        - And so on...
+
+        Returns:
+            Dictionary mapping level number to list of (type_name, type_kind)
+            tuples at that level. Levels are 0-indexed.
+
+        Example:
+            {
+                0: [("BaseClass", "struct"), ("Interface", "struct")],
+                1: [("Player", "struct"), ("Enemy", "struct")],
+                2: [("PlayerModule", "struct")],
+            }
+        """
         if not self.dependencies:
             self.build_dependency_graph()
-        
+
+        # Compute level for each type
+        type_levels: Dict[str, int] = {}
+
+        # Types with no dependencies are level 0
+        for type_name in self.dependencies:
+            deps = self.dependencies[type_name]
+            # Filter to only include deps that are in our dependency graph
+            valid_deps = deps & set(self.dependencies.keys())
+            if not valid_deps:
+                type_levels[type_name] = 0
+
+        # Iteratively compute levels for remaining types
+        # Level = max(dependency levels) + 1
+        max_iterations = len(self.dependencies) + 1
+        for _ in range(max_iterations):
+            changed = False
+            for type_name in self.dependencies:
+                if type_name in type_levels:
+                    continue
+
+                deps = self.dependencies[type_name]
+                valid_deps = deps & set(self.dependencies.keys())
+
+                # Check if all dependencies have levels assigned
+                if all(d in type_levels for d in valid_deps):
+                    if valid_deps:
+                        max_dep_level = max(type_levels[d] for d in valid_deps)
+                        type_levels[type_name] = max_dep_level + 1
+                    else:
+                        type_levels[type_name] = 0
+                    changed = True
+
+            if not changed:
+                break
+
+        # Handle any remaining types (circular dependencies, etc.)
+        # Place them at max_level + 1
+        if type_levels:
+            max_level = max(type_levels.values())
+        else:
+            max_level = -1
+
+        for type_name in self.dependencies:
+            if type_name not in type_levels:
+                type_levels[type_name] = max_level + 1
+                logger.debug(f"Type {type_name} placed at overflow level {max_level + 1}")
+
+        # Group by level with type kind
+        levels: Dict[int, List[Tuple[str, str]]] = {}
+        for type_name, level in type_levels.items():
+            if level not in levels:
+                levels[level] = []
+            kind = self.type_nodes[type_name].kind if type_name in self.type_nodes else "unknown"
+            levels[level].append((type_name, kind))
+
+        # Sort types within each level for deterministic output
+        for level in levels:
+            levels[level].sort(key=lambda x: x[0])
+
+        logger.info(
+            f"Dependency levels: {len(levels)} levels, "
+            f"types per level: {[len(levels[l]) for l in sorted(levels.keys())]}"
+        )
+
+        return levels
+
+    def get_type_dependencies(self, type_name: str) -> Set[str]:
+        """Get the direct dependencies of a specific type.
+
+        Args:
+            type_name: Name of the type to look up dependencies for.
+
+        Returns:
+            Set of type names that the specified type directly depends on.
+            Returns an empty set if the type is not found in the graph.
+        """
+        if not self.dependencies:
+            self.build_dependency_graph()
+
         return self.dependencies.get(type_name, set())
     
     def get_dependency_stats(self) -> Dict[str, any]:
-        """Get statistics about the dependency graph"""
+        """Get statistics about the dependency graph.
+
+        Returns:
+            Dictionary containing:
+            - total_types: Number of types in the graph.
+            - total_dependencies: Total number of dependency edges.
+            - average_dependencies: Mean dependencies per type.
+            - max_dependencies: Maximum dependencies for any single type.
+            - types_with_no_deps: Count of types with zero dependencies.
+            - circular_dependency_groups: Number of cycle groups.
+            - types_in_cycles: Total types involved in circular dependencies.
+        """
         if not self.dependencies:
             self.build_dependency_graph()
         
@@ -361,16 +540,21 @@ class DependencyAnalyzer:
         }
     
     def print_summary(self):
-        """Print a summary of the dependency analysis"""
+        """Print a summary of the dependency analysis to the logger.
+
+        Outputs formatted statistics including total types, dependency counts,
+        averages, and circular dependency information. Useful for debugging
+        and understanding the structure of the codebase.
+        """
         stats = self.get_dependency_stats()
-        print(f"\n{'='*60}")
-        print("Dependency Analysis Summary")
-        print('='*60)
-        print(f"Total types: {stats['total_types']}")
-        print(f"Total dependency edges: {stats['total_dependencies']}")
-        print(f"Average dependencies per type: {stats['average_dependencies']:.2f}")
-        print(f"Max dependencies: {stats['max_dependencies']}")
-        print(f"Types with no dependencies: {stats['types_with_no_deps']}")
-        print(f"Circular dependency groups: {stats['circular_dependency_groups']}")
-        print(f"Types involved in cycles: {stats['types_in_cycles']}")
-        print('='*60 + "\n")
+        logger.info("=" * 60)
+        logger.info("Dependency Analysis Summary")
+        logger.info("=" * 60)
+        logger.info(f"Total types: {stats['total_types']}")
+        logger.info(f"Total dependency edges: {stats['total_dependencies']}")
+        logger.info(f"Average dependencies per type: {stats['average_dependencies']:.2f}")
+        logger.info(f"Max dependencies: {stats['max_dependencies']}")
+        logger.info(f"Types with no dependencies: {stats['types_with_no_deps']}")
+        logger.info(f"Circular dependency groups: {stats['circular_dependency_groups']}")
+        logger.info(f"Types involved in cycles: {stats['types_in_cycles']}")
+        logger.info("=" * 60)

@@ -21,37 +21,44 @@ class ProcessedMethod:
 
 
 class ClassAssembler:
-    """
-    Assembles final C++ source files from processed components.
-    
+    """Assembles final C++ source files from processed components.
+
     This is a non-LLM component that simply combines:
     - Generated headers (from ClassHeaderGenerator)
     - Processed method implementations (from FunctionProcessor)
     """
-    
+
     def __init__(self, output_dir: Path):
-        """
-        Initialize the assembler.
-        
+        """Initialize the assembler with the output directory.
+
+        Creates the output directory if it doesn't exist.
+
         Args:
-            output_dir: Base output directory for generated files
+            output_dir: Base output directory for generated files.
+                Subdirectories for include/ and src/ will be created
+                as needed when writing files.
         """
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
     
-    def assemble_source(self, class_name: str, 
+    def assemble_source(self, class_name: str,
                         processed_methods: List[ProcessedMethod],
                         namespace: Optional[str] = None) -> str:
-        """
-        Combine processed methods into a .cpp source file.
-        
+        """Combine processed methods into a .cpp source file content string.
+
+        Generates the source file content by adding the appropriate include
+        directive and concatenating all processed method implementations.
+
         Args:
-            class_name: Name of the class
-            processed_methods: List of processed method objects
-            namespace: Optional namespace for organization
-            
+            class_name: Name of the class being assembled.
+            processed_methods: List of ProcessedMethod objects containing
+                the modernized method implementations.
+            namespace: Optional namespace for the class. Used to construct
+                the include path (e.g., "Turbine" -> "Turbine/ClassName.h").
+
         Returns:
-            Generated source file content
+            Complete source file content as a string, including the include
+            directive and all method implementations.
         """
         lines = []
         if namespace:
@@ -74,16 +81,23 @@ class ClassAssembler:
     def write_source_file(self, class_name: str,
                           processed_methods: List[ProcessedMethod],
                           namespace: Optional[str] = None) -> Path:
-        """
-        Write assembled source file to disk.
-        
+        """Write the assembled source file to disk.
+
+        Filters out methods with empty code, assembles the remaining methods
+        into a .cpp file, and writes it to the appropriate location under
+        the src/ subdirectory.
+
         Args:
-            class_name: Name of the class
-            processed_methods: List of processed methods
-            namespace: Optional namespace for subdirectory
-            
+            class_name: Name of the class being written.
+            processed_methods: List of ProcessedMethod objects to include.
+                Methods with empty processed_code are filtered out.
+            namespace: Optional namespace for organizing the output. Creates
+                a subdirectory structure matching the namespace
+                (e.g., "Turbine::UI" -> "src/Turbine/UI/").
+
         Returns:
-            Path to written file
+            Path to the written .cpp file, or None if no methods had
+            non-empty code to write.
         """
         # Skip if no methods with actual code
         non_empty_methods = [m for m in processed_methods if m.processed_code.strip()]
@@ -109,17 +123,25 @@ class ClassAssembler:
                           header_code: str,
                           namespace: Optional[str] = None,
                           path: Optional[Path] = None) -> Path:
-        """
-        Write header file to disk.
-        
+        """Write a header file to disk.
+
+        Writes the generated header content to the appropriate location.
+        If a specific path is provided, uses that; otherwise, constructs
+        the path based on the class name and optional namespace under
+        the include/ subdirectory.
+
         Args:
-            class_name: Name of the class
-            header_code: Generated header content
-            namespace: Optional namespace for subdirectory
-            path: Optional full path to write to
-            
+            class_name: Name of the class for the header file name.
+            header_code: The complete header file content to write.
+            namespace: Optional namespace for organizing the output. Creates
+                a subdirectory structure matching the namespace
+                (e.g., "Turbine" -> "include/Turbine/").
+            path: Optional explicit path to write to. If provided, overrides
+                the default path construction based on namespace.
+
         Returns:
-            Path to written file
+            Path to the written .h file, or None if header_code was
+            empty or whitespace-only.
         """
         if not header_code or not header_code.strip():
             return None
@@ -144,16 +166,21 @@ class ClassAssembler:
     def write_enum_header(self, enum_name: str,
                           enum_code: str,
                           namespace: Optional[str] = None) -> Path:
-        """
-        Write enum header file. Enums don't need LLM processing.
-        
+        """Write an enum header file to disk.
+
+        Writes the enum definition to a header file. Automatically adds
+        '#pragma once' if not already present. Enums are written directly
+        without LLM processing since they don't require modernization.
+
         Args:
-            enum_name: Name of the enum
-            enum_code: Enum definition code
-            namespace: Optional namespace for subdirectory
-            
+            enum_name: Name of the enum for the header file name.
+            enum_code: The enum definition code to write.
+            namespace: Optional namespace for organizing the output. Creates
+                a subdirectory structure matching the namespace
+                (e.g., "Turbine" -> "include/Turbine/").
+
         Returns:
-            Path to written file
+            Path to the written .h file, or None if enum_code was empty.
         """
         if not enum_code:
             return None

@@ -1,21 +1,34 @@
+"""
+Type Writer - Manages output of parsed types to files and database.
+"""
 import shutil
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import List
+
 from .struct import Struct
 from .enum import Enum
 from .method import Method
 from .db_handler import DatabaseHandler
-from .offset_mapper import OffsetMapper
 
 
 class TypeWriter:
     """Writes parsed types to files and/or database"""
     
     def __init__(self, output_path: str, use_database: bool = True):
+        """Initialize the type writer with output configuration.
+
+        Creates the output directory structure and optionally initializes
+        a database for storing parsed types. If the output directory exists,
+        it will be completely removed and recreated.
+
+        Args:
+            output_path: Path to the output directory where files will be written.
+            use_database: If True, creates a SQLite database (types.db) in the
+                output directory for storing parsed type information.
+        """
         self.output_path = Path(output_path)
         self.src_path = self.output_path / 'src'
         self.use_database = use_database
-
 
         if self.output_path.exists():
             shutil.rmtree(self.output_path)
@@ -27,13 +40,34 @@ class TypeWriter:
             self.db_handler = DatabaseHandler(self.db_path)
         
     def write_typedefs(self, typedefs: List[str]):
-        """Write typedefs to file"""
+        """Write typedef declarations to a summary file.
+
+        Writes all typedefs sorted alphabetically to 'typedefs.txt' in the
+        output directory.
+
+        Args:
+            typedefs: List of typedef declaration strings to write.
+        """
         with open(self.output_path / 'typedefs.txt', 'w') as f:
             for typedef in sorted(typedefs):
                 f.write(f"{typedef}\n")
     
-    def write_funcs(self, funcs: Dict[str, Method], structs: Dict[str, Struct], 
+    def write_funcs(self, funcs: Dict[str, Method], structs: Dict[str, Struct],
                     replacer=None):
+        """Write method/function definitions to files and database.
+
+        Categorizes functions into four groups based on scope (global vs class)
+        and ignored status, writing summary files for each category. Non-ignored
+        functions are also written to individual source files and optionally
+        stored in the database.
+
+        Args:
+            funcs: Dictionary mapping function names to Method objects.
+            structs: Dictionary mapping struct names to Struct objects, used
+                for resolving parent class information during file output.
+            replacer: Optional constant replacer object with a process_code()
+                method for substituting named constants in function bodies.
+        """
         categories = {
             'class_functions.txt': lambda e: not e.is_global and not e.is_ignored,
             'class_functions_ignored.txt': lambda e: not e.is_global and e.is_ignored,
@@ -74,7 +108,17 @@ class TypeWriter:
                 f.write("".join(sorted_funcs))
 
     def write_enums(self, enums: Dict[str, Enum], structs: Dict[str, Struct] = None):
-        """Write all enums to appropriate files and database"""
+        """Write enum definitions to files and database.
+
+        Separates enums into ignored and non-ignored categories, writing
+        summary files for each. Non-ignored enums are written to individual
+        source files organized by namespace and stored in the database.
+
+        Args:
+            enums: Dictionary mapping enum names to Enum objects.
+            structs: Optional dictionary of structs for namespace resolution
+                during file output.
+        """
         categories = {
             'enums.txt': lambda e: not e.is_ignored,
             'enums_ignored.txt': lambda e: e.is_ignored
@@ -107,7 +151,16 @@ class TypeWriter:
                 summary_file.write("".join(sorted_enums))
 
     def write_structs(self, structs: Dict[str, Struct]):
-        """Write all structs to appropriate files and database, handling vtables"""
+        """Write struct/class definitions to files and database.
+
+        Categorizes structs into regular, generic (template), and ignored groups,
+        writing summary files for each. Non-ignored, non-generic structs are
+        written to individual source files. Vtable structs are detected and
+        associated with their parent struct in the database.
+
+        Args:
+            structs: Dictionary mapping struct names to Struct objects.
+        """
         categories = {
             'structs.txt': lambda s: not s.is_generic and not s.is_ignored,
             'structs_generic.txt': lambda s: s.is_generic and not s.is_ignored,
