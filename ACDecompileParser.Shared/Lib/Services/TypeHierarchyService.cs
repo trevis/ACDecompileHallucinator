@@ -237,4 +237,23 @@ public class TypeHierarchyService : ITypeHierarchyService
                 .ToList();
         }
     }
+    private class CaseInsensitiveTupleComparer : IEqualityComparer<(string outputFileName, string physicalPath)>
+    {
+        public bool Equals((string outputFileName, string physicalPath) x, (string outputFileName, string physicalPath) y)
+        {
+            return string.Equals(x.outputFileName, y.outputFileName, StringComparison.OrdinalIgnoreCase) &&
+                   string.Equals(x.physicalPath, y.physicalPath, StringComparison.OrdinalIgnoreCase);
+        }
+
+        public int GetHashCode((string outputFileName, string physicalPath) obj)
+        {
+            unchecked
+            {
+                int hash = 17;
+                hash = hash * 23 + (obj.outputFileName?.ToLowerInvariant().GetHashCode() ?? 0);
+                hash = hash * 23 + (obj.physicalPath?.ToLowerInvariant().GetHashCode() ?? 0);
+                return hash;
+            }
+        }
+    }
 }
