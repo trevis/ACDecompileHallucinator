@@ -506,4 +506,43 @@ public class CSharpBindingsGeneratorTests
         // Full signature check
         Assert.Contains("RegisterFrameworkClass(uint mode, delegate* unmanaged[Cdecl]<ACBindings.UIMainFramework*> createMethod)", output);
     }
+    [Fact]
+    public void Test_FunctionPointerParameter_WithName_InStaticMethod()
+    {
+        // Arrange - simulates UIFlow::RegisterFrameworkClass(unsigned int mode, UIMainFramework *(__cdecl *createMethod)())
+        // This tests that named function pointers are correctly parsed and generated
+        var uiFlowType = new TypeModel
+        {
+            Id = 1,
+            BaseName = "UIFlow",
+            Type = TypeType.Struct,
+            FunctionBodies = new List<FunctionBodyModel>
+        {
+            new()
+            {
+                Id = 101,
+                FullyQualifiedName = "UIFlow::RegisterFrameworkClass",
+                FunctionSignature = new FunctionSignatureModel
+                {
+                    ReturnType = "void",
+                    CallingConvention = "Cdecl",
+                    Parameters = FunctionParamParser.ParseFunctionParameters(
+                        "unsigned int mode, UIMainFramework *(__cdecl *createMethod)()")
+                },
+                Offset = 0x00479C50
+            }
+        }
+        };
+
+        // Act
+        var output = _generator.Generate(uiFlowType);
+        _testOutput.WriteLine(output);
+
+        // Assert - should NOT contain the broken raw string
+        Assert.DoesNotContain("UIMainFramework*(__cdecl*", output);
+
+        // Should contain proper delegate* syntax with correct parameter name
+        Assert.Contains("delegate* unmanaged[Cdecl]<ACBindings.UIMainFramework*>", output);
+        Assert.Contains("createMethod", output);
+    }
 }
