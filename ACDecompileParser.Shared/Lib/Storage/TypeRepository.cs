@@ -715,13 +715,14 @@ public class TypeRepository : ITypeRepository
         var idSet = typeIds.ToHashSet();
         return _context.FunctionBodies
             .Include(fb => fb.FunctionSignature)
-            .ThenInclude(fs => fs.Parameters)
+                .ThenInclude(fs => fs.Parameters)
+                    .ThenInclude(p => p.NestedFunctionSignature)
+                        .ThenInclude(nfs => nfs.Parameters)
             .Where(fb => fb.ParentId.HasValue && idSet.Contains(fb.ParentId.Value))
             .ToList()
             .GroupBy(fb => fb.ParentId!.Value)
             .ToDictionary(g => g.Key, g => g.ToList());
     }
-
     public int InsertStaticVariable(StaticVariableModel staticVariable)
     {
         _context.StaticVariables.Add(staticVariable);
