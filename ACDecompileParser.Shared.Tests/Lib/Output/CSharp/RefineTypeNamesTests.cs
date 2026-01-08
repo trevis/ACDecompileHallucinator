@@ -41,13 +41,13 @@ public class RefineTypeNamesTests
         _testOutput.WriteLine(output);
 
         // Verify struct name is stripped
-        Assert.Contains("public unsafe struct A123", output);
+        Assert.Contains("public unsafe struct _A123", output);
         Assert.DoesNotContain("$A123", output);
 
         // Verify member type is stripped (using MapType)
-        Assert.Contains("public ACBindings.B456 __s0;", output);
+        Assert.Contains("public ACBindings._B456 __s0;", output);
         
         // Verify static member type is stripped (using MapTypeForStaticPointer)
-        Assert.Contains("public static ACBindings.C789* staticPtr", output);
+        Assert.Contains("public static ACBindings._C789* staticPtr", output);
     }
 }

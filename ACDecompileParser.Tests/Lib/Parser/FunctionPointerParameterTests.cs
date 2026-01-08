@@ -71,7 +71,7 @@ public class FunctionPointerParameterTests
         var paramString = "HRESULT (__cdecl *)(const unsigned __int16 *)";
 
         // Act
-        var (returnType, callingConvention, parameters) =
+        var (returnType, callingConvention, parameters, name) =
             ParsingUtilities.ExtractFunctionPointerParameterInfo(paramString);
 
         // Assert
@@ -87,7 +87,7 @@ public class FunctionPointerParameterTests
         var paramString = "void (*)(int, int)";
 
         // Act
-        var (returnType, callingConvention, parameters) =
+        var (returnType, callingConvention, parameters, name) =
             ParsingUtilities.ExtractFunctionPointerParameterInfo(paramString);
 
         // Assert
@@ -103,7 +103,7 @@ public class FunctionPointerParameterTests
         var paramString = "unsigned __int16 *(__cdecl *)(const unsigned __int16 *)";
 
         // Act
-        var (returnType, callingConvention, parameters) =
+        var (returnType, callingConvention, parameters, name) =
             ParsingUtilities.ExtractFunctionPointerParameterInfo(paramString);
 
         // Assert
@@ -119,7 +119,7 @@ public class FunctionPointerParameterTests
         var paramString = "int value";
 
         // Act
-        var (returnType, callingConvention, parameters) =
+        var (returnType, callingConvention, parameters, name) =
             ParsingUtilities.ExtractFunctionPointerParameterInfo(paramString);
 
         // Assert
