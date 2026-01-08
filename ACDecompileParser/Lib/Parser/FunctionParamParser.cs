@@ -135,22 +135,26 @@ public class FunctionParamParser
 
         return parameters;
     }
-
     /// <summary>
     /// Parses a function pointer parameter (e.g., HRESULT (__cdecl *)(const unsigned __int16 *))
     /// </summary>
     private static FunctionParamModel? ParseFunctionPointerParameter(string param, int position, string? file = null,
         int? lineNumber = null, string? source = null)
     {
-        var (returnType, callingConvention, innerParams) = ParsingUtilities.ExtractFunctionPointerParameterInfo(param);
+        var (returnType, callingConvention, innerParams, extractedName) = ParsingUtilities.ExtractFunctionPointerParameterInfo(param);
 
         if (returnType == null)
             return null;
 
+        // Use extracted name if available, otherwise generate one
+        var paramName = !string.IsNullOrEmpty(extractedName)
+            ? extractedName
+            : $"__param{position + 1}";
+
         // Create the function signature for this parameter
         var functionSignature = new FunctionSignatureModel
         {
-            Name = $"__funcptr_param{position + 1}",
+            Name = paramName,
             ReturnType = ParsingUtilities.NormalizeTypeString(returnType),
             CallingConvention = callingConvention ?? string.Empty,
             ReturnTypeReference = TypeResolver.CreateTypeReference(returnType),
@@ -170,7 +174,7 @@ public class FunctionParamParser
         return new FunctionParamModel
         {
             ParameterType = param, // Store the full function pointer type string
-            Name = $"__funcptr_param{position + 1}",
+            Name = paramName,
             Source = source ?? param.Trim(),
             LineNumber = lineNumber,
             File = file,
@@ -181,7 +185,6 @@ public class FunctionParamParser
             TypeReferenceId = null
         };
     }
-
     /// <summary>
     /// Parses parameters for a function signature (used for nested function pointer types)
     /// </summary>
