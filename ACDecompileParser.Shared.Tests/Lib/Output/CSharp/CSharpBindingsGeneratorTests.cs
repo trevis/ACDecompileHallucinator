@@ -258,4 +258,83 @@ public class CSharpBindingsGeneratorTests
         Assert.Contains("public int Set3DViewInternal(int x, int y) => BaseClass_Render.Set3DViewInternal(x, y);",
             output);
     }
+    [Fact]
+    public void Test_Using_Namespace_Replacement()
+    {
+        var baseType = new TypeModel
+        {
+            Id = 1,
+            BaseName = "Core::Base",
+            Type = TypeType.Struct
+        };
+
+        var derivedType = new TypeModel
+        {
+            Id = 2,
+            BaseName = "App::Derived",
+            Type = TypeType.Struct,
+            BaseTypes = new List<TypeInheritance>
+            {
+                new() { RelatedType = baseType, RelatedTypeId = 1 }
+            },
+            StructMembers = new List<StructMemberModel>
+            {
+                new() { Name = "m_ptr", TypeString = "Core::Base*", DeclarationOrder = 1 },
+                new() { Name = "m_val", TypeString = "Core::Value", DeclarationOrder = 2 }
+            },
+            FunctionBodies = new List<FunctionBodyModel>
+            {
+                new()
+                {
+                    Id = 201,
+                    FullyQualifiedName = "App::Derived::GetBase",
+                    FunctionSignature = new FunctionSignatureModel
+                    {
+                        ReturnType = "Core::Base*",
+                        CallingConvention = "Thiscall",
+                        Parameters = new List<FunctionParamModel>
+                        {
+                            new() { Name = "this", ParameterType = "App::Derived*", Position = 0 }
+                        }
+                    },
+                    Offset = 0x12345678
+                }
+            }
+        };
+
+        // We need static method too to test that path
+        baseType.FunctionBodies = new List<FunctionBodyModel>
+        {
+            new()
+            {
+                Id = 101,
+                FullyQualifiedName = "Core::Base::StaticMethod",
+                FunctionSignature = new FunctionSignatureModel
+                {
+                    ReturnType = "int",
+                    CallingConvention = "Cdecl",
+                    Parameters = new List<FunctionParamModel>()
+                },
+                Offset = 0x87654321
+            }
+        };
+
+        _mockRepository.Setup(r => r.GetFunctionBodiesForType(1)).Returns(baseType.FunctionBodies);
+
+        var output = _generator.Generate(derivedType);
+        _testOutput.WriteLine(output);
+
+        // Verify namespace replacement in member types
+        Assert.Contains("public void* m_ptr;", output); // Pointers are always void* but MapType handles it
+        Assert.Contains("public Core.Value m_val;", output);
+
+        // Verify namespace replacement in base class
+        Assert.Contains("public Core.Base BaseClass_Core_Base;", output);
+
+        // Verify namespace replacement in return types
+        Assert.Contains("public void* GetBase()", output);
+
+        // Verify pulled up static method
+        Assert.Contains("public static int StaticMethod() => Core.Base.StaticMethod();", output);
+    }
 }
