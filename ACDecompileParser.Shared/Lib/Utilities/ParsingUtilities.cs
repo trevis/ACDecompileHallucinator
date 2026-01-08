@@ -951,37 +951,31 @@ public static class ParsingUtilities
         var pattern = @"\(\s*(__thiscall|__stdcall|__cdecl|__fastcall)?\s*\*\s*\w*\s*\)\s*\(";
         return Regex.IsMatch(trimmed, pattern);
     }
-    /// <summary>
-    /// Extracts function pointer information from a parameter string.
-    /// Handles parameters like: HRESULT (__cdecl *)(const unsigned __int16 *)
-    /// </summary>
-    /// <param name="paramString">The function pointer parameter string</param>
-    /// <returns>Tuple with (ReturnType, CallingConvention, Parameters) or nulls if not a function pointer</returns>
-    public static (string? ReturnType, string? CallingConvention, string? Parameters)
+    public static (string? ReturnType, string? CallingConvention, string? Parameters, string? Name)
         ExtractFunctionPointerParameterInfo(string paramString)
     {
         if (!IsFunctionPointerParameter(paramString))
-            return (null, null, null);
+            return (null, null, null, null);
 
         var trimmed = paramString.Trim();
 
-        // Pattern to match function pointer: ReturnType (CallingConvention *)(Params)
-        // Groups: 1=ReturnType, 2=CallingConvention (optional), 3=Parameters
-        var pattern = @"^(.+?)\s*\(\s*(__thiscall|__stdcall|__cdecl|__fastcall)?\s*\*\s*\)\s*\((.*)?\)$";
+        // Pattern to match function pointer: ReturnType (CallingConvention *[name])(Params)
+        // Groups: 1=ReturnType, 2=CallingConvention (optional), 3=Name (optional), 4=Parameters
+        var pattern = @"^(.+?)\s*\(\s*(__thiscall|__stdcall|__cdecl|__fastcall)?\s*\*\s*(\w*)\s*\)\s*\((.*?)?\)$";
         var match = Regex.Match(trimmed, pattern);
 
         if (match.Success)
         {
             string returnType = match.Groups[1].Value.Trim();
             string callingConvention = match.Groups[2].Success ? match.Groups[2].Value.Trim() : string.Empty;
-            string parameters = match.Groups[3].Success ? match.Groups[3].Value.Trim() : string.Empty;
+            string name = match.Groups[3].Success ? match.Groups[3].Value.Trim() : string.Empty;
+            string parameters = match.Groups[4].Success ? match.Groups[4].Value.Trim() : string.Empty;
 
-            return (returnType, callingConvention, parameters);
+            return (returnType, callingConvention, parameters, name);
         }
 
-        return (null, null, null);
+        return (null, null, null, null);
     }
-
     /// <summary>
     /// Checks if a function pointer has a function pointer return type.
     /// These look like: HRESULT (__cdecl *(__thiscall *GetWndProc)(IKeystoneDocument *this))(IKeystoneWindow *, unsigned int, unsigned int, int)
