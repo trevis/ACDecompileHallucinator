@@ -105,7 +105,8 @@ public class CSharpBindingsGenerator
         string interfaces = hasDestructor ? " : System.IDisposable" : "";
 
         // Struct declaration
-        sb.AppendLine($"{indent}public unsafe struct {type.BaseName}{interfaces}");
+        string safeBaseName = PrimitiveTypeMappings.CleanTypeName(type.BaseName);
+        sb.AppendLine($"{indent}public unsafe struct {safeBaseName}{interfaces}");
         sb.AppendLine($"{indent}{{");
 
         bool hasContent = false;
@@ -125,7 +126,8 @@ public class CSharpBindingsGenerator
                 string rawFqn = resolvedType.FullyQualifiedName;
                 if (string.IsNullOrEmpty(rawFqn) || rawFqn == "Unknown") rawFqn = bt.RelatedTypeString ?? "Unknown";
 
-                string fieldName = $"BaseClass_{rawFqn.Replace("::", ".").Replace(".", "_")}";
+                string cleanedFqn = PrimitiveTypeMappings.CleanTypeName(rawFqn);
+                string fieldName = $"BaseClass_{cleanedFqn.Replace("::", ".").Replace(".", "_")}";
                 sb.AppendLine($"{memberIndent}public {baseTypeName} {fieldName}; // {baseTypeName}");
             }
 
@@ -291,7 +293,7 @@ public class CSharpBindingsGenerator
         if (type == null) return "ACBindings.Unknown";
 
         string ns = type.Namespace ?? string.Empty;
-        string baseName = (type.BaseName ?? "Unknown").Replace("::", ".");
+        string baseName = PrimitiveTypeMappings.CleanTypeName(type.BaseName ?? "Unknown").Replace("::", ".");
         string fqn;
 
         if (string.IsNullOrEmpty(ns))
@@ -445,7 +447,8 @@ public class CSharpBindingsGenerator
                 {
                     string key = basePair.Key;
                     // Sanitize key (which is FQN) for field name
-                    string fieldName = $"BaseClass_{key.Replace("::", ".").Replace(".", "_")}";
+                    string cleanedKey = PrimitiveTypeMappings.CleanTypeName(key);
+                    string fieldName = $"BaseClass_{cleanedKey.Replace("::", ".").Replace(".", "_")}";
                     sb.AppendLine($"{indent}    {fieldName}.Dispose();");
                 }
             }
@@ -464,8 +467,9 @@ public class CSharpBindingsGenerator
 
         // Detect underlying type
         string underlyingType = PrimitiveTypeMappings.GetEnumUnderlyingType(members);
+        string safeBaseName = PrimitiveTypeMappings.CleanTypeName(type.BaseName);
 
-        sb.AppendLine($"{indent}public enum {type.BaseName} : {underlyingType}");
+        sb.AppendLine($"{indent}public enum {safeBaseName} : {underlyingType}");
         sb.AppendLine($"{indent}{{");
 
         for (int i = 0; i < members.Count; i++)

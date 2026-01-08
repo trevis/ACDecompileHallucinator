@@ -22,7 +22,7 @@ public class CSharpFileOutputGenerator
     }
 
     public void GenerateCSharpFiles(List<TypeModel> typeModels, string outputDir = "./cs/",
-    ITypeRepository? repository = null, IProgressReporter? reporter = null)
+        ITypeRepository? repository = null, IProgressReporter? reporter = null)
     {
         _repository = repository;
 
@@ -34,6 +34,7 @@ public class CSharpFileOutputGenerator
         {
             Directory.Delete(outputDir, true);
         }
+
         Directory.CreateDirectory(outputDir);
 
         // Create lookup cache
@@ -73,9 +74,11 @@ public class CSharpFileOutputGenerator
             }
 
             // Create the C# file name
-            string fileName = outputFileName.Contains("::")
-            ? outputFileName.Substring(outputFileName.LastIndexOf("::") + 2)
-            : outputFileName;
+            string rawName = outputFileName.Contains("::")
+                ? outputFileName.Substring(outputFileName.LastIndexOf("::") + 2)
+                : outputFileName;
+
+            string fileName = ACDecompileParser.Shared.Lib.Constants.PrimitiveTypeMappings.CleanTypeName(rawName);
 
             // Create the file path
             string csPath = Path.Combine(dirPath, $"{fileName}.cs");

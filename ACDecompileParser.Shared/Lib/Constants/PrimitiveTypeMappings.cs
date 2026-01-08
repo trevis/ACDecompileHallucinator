@@ -123,12 +123,6 @@ public static class PrimitiveTypeMappings
         if (string.IsNullOrWhiteSpace(cppType))
             return "void";
 
-        // Handle PrimitiveInplaceArray specially to remove literal args
-        if (cppType.StartsWith("PrimitiveInplaceArray<", StringComparison.OrdinalIgnoreCase))
-        {
-            return StripLiteralTemplateArgs(cppType, false);
-        }
-
         // Normalize the type string first
         string normalized = ParsingUtilities.NormalizeTypeString(cppType);
 
@@ -146,7 +140,7 @@ public static class PrimitiveTypeMappings
             return "void*";
         }
 
-        // Strip const and other qualifiers
+        // Strip const and other qualifiers used for mapping lookup
         string baseType = normalized
             .Replace("const ", "")
             .Replace("volatile ", "")
@@ -155,15 +149,29 @@ public static class PrimitiveTypeMappings
             .Replace("union ", "")
             .Trim();
 
-        // Look up in mapping
+        // Look up in mapping first (prioritize exact collection matches like IDClass)
         if (CppToCSharp.TryGetValue(baseType, out string? csType))
         {
             return csType;
         }
 
+        // Check for generics
+        int openBracket = baseType.IndexOf('<');
+        if (openBracket != -1)
+        {
+            string genericBase = baseType.Substring(0, openBracket);
+            // Ensure we handle the closing bracket correctly
+            int closeBracket = baseType.LastIndexOf('>');
+            if (closeBracket > openBracket)
+            {
+                string templateArgsText = baseType.Substring(openBracket + 1, closeBracket - openBracket - 1);
+                return ProcessGenericType(genericBase, templateArgsText);
+            }
+        }
+
         // If not found, return the original (might be a custom type)
         // For custom types in C# bindings, we'll assume they're defined elsewhere
-        return "ACBindings." + baseType.Replace("::", ".");
+        return "ACBindings." + CleanTypeName(baseType.Replace("::", "."));
     }
 
     /// <summary>
@@ -174,32 +182,23 @@ public static class PrimitiveTypeMappings
         if (string.IsNullOrWhiteSpace(cppType))
             return "void*";
 
-        // Handle PrimitiveInplaceArray specially
-        if (cppType.StartsWith("PrimitiveInplaceArray<", StringComparison.OrdinalIgnoreCase))
-        {
-            return StripLiteralTemplateArgs(cppType, true);
-        }
-
         string normalized = ParsingUtilities.NormalizeTypeString(cppType);
 
-        // Strip pointer suffix if present
+        // Strip pointer suffix if present to map the underlying type
         string baseType = normalized.TrimEnd('*', ' ');
-        baseType = baseType
-            .Replace("const ", "")
-            .Replace("volatile ", "")
-            .Replace("struct ", "")
-            .Replace("enum ", "")
-            .Replace("union ", "")
-            .Trim();
 
-        // Look up in mapping
-        if (CppToCSharp.TryGetValue(baseType, out string? csType))
-        {
-            return csType + "*";
-        }
+        // We do NOT return void* here; we want the actual typed pointer.
+        // So we map the underlying type using MapType (which now handles generics/literals), then append *
 
-        // Custom type pointer
-        return "ACBindings." + baseType.Replace("::", ".") + "*";
+        string mappedBase = MapType(baseType);
+
+        // If MapType returns void* (because it thought baseType was a pointer?), we just return it as is?
+        // But baseType shouldn't be a pointer if we stripped it.
+        // Unless it was a double pointer? ** -> *
+        if (mappedBase == "void*")
+            return "void*"; // Fallback if internal map failed or it was void**
+
+        return mappedBase + "*";
     }
 
     /// <summary>
@@ -338,37 +337,67 @@ public static class PrimitiveTypeMappings
         return false;
     }
 
-    private static string StripLiteralTemplateArgs(string cppType, bool forStaticPointer)
+    private static string ProcessGenericType(string baseType, string templateArgs)
     {
-        int openBracket = cppType.IndexOf('<');
-        int closeBracket = cppType.LastIndexOf('>');
-        if (openBracket != -1 && closeBracket > openBracket)
+        // 1. Map the base type (e.g. SmartArray)
+        string mappedBase = MapType(baseType);
+
+        // 2. Parse and map arguments
+        var args = SplitTemplateArgs(templateArgs);
+        var mappedArgs = new List<string>();
+
+        foreach (var arg in args)
         {
-            string inner = cppType.Substring(openBracket + 1, closeBracket - openBracket - 1);
-            // The first argument is the type. We need to handle nested templates if they exist.
-            int firstComma = -1;
-            int depth = 0;
-            for (int i = 0; i < inner.Length; i++)
-            {
-                if (inner[i] == '<') depth++;
-                else if (inner[i] == '>') depth--;
-                else if (inner[i] == ',' && depth == 0)
-                {
-                    firstComma = i;
-                    break;
-                }
-            }
+            if (IsNumericLiteral(arg))
+                continue;
 
-            string firstArg = firstComma == -1 ? inner : inner.Substring(0, firstComma).Trim();
-
-            // Recursively map the first argument using base MapType (for the element type)
-            string mappedFirstArg = MapType(firstArg);
-
-            string result = $"ACBindings.PrimitiveInplaceArray<{mappedFirstArg}>";
-            if (forStaticPointer) result += "*";
-            return result;
+            mappedArgs.Add(MapType(arg));
         }
 
-        return cppType;
+        if (mappedArgs.Count == 0)
+            return mappedBase;
+
+        return $"{mappedBase}<{string.Join(",", mappedArgs)}>";
+    }
+
+    private static List<string> SplitTemplateArgs(string args)
+    {
+        var list = new List<string>();
+        int depth = 0;
+        int start = 0;
+        for (int i = 0; i < args.Length; i++)
+        {
+            if (args[i] == '<') depth++;
+            else if (args[i] == '>') depth--;
+            else if (args[i] == ',' && depth == 0)
+            {
+                list.Add(args.Substring(start, i - start).Trim());
+                start = i + 1;
+            }
+        }
+
+        if (start < args.Length)
+            list.Add(args.Substring(start).Trim());
+
+        return list;
+    }
+
+    private static bool IsNumericLiteral(string arg)
+    {
+        if (string.IsNullOrEmpty(arg)) return false;
+        // Check for digit start or negative sign followed by digit
+        char c = arg[0];
+        if (char.IsDigit(c)) return true;
+        if (c == '-' && arg.Length > 1 && char.IsDigit(arg[1])) return true;
+        return false;
+    }
+
+    /// <summary>
+    /// Removes $ and other unwanted characters from a type name.
+    /// </summary>
+    public static string CleanTypeName(string name)
+    {
+        if (string.IsNullOrEmpty(name)) return name;
+        return name.Replace("$", "");
     }
 }

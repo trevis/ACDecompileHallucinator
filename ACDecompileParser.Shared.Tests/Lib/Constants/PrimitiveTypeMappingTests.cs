@@ -13,6 +13,10 @@ public class PrimitiveTypeMappingTests
     [InlineData("int", "int")]
     [InlineData("ArchiveVersionRow::VersionEntry", "ACBindings.ArchiveVersionRow.VersionEntry")]
     [InlineData("Vector3", "ACBindings.Vector3")]
+    [InlineData("SmartArray<ACCharGenStartArea,1>", "ACBindings.SmartArray<ACBindings.ACCharGenStartArea>")]
+    [InlineData("HashTable<unsigned long,HeritageGroup_CG,0>",
+        "ACBindings.HashTable<uint,ACBindings.HeritageGroup_CG>")]
+    [InlineData("Foo<Bar<int, 5>, 10>", "ACBindings.Foo<ACBindings.Bar<int>>")]
     public void MapType_PrimitiveInplaceArray_RemovesLiteralArgs(string input, string expected)
     {
         var result = PrimitiveTypeMappings.MapType(input);
