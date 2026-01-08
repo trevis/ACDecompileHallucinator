@@ -1,0 +1,348 @@
+@using ACDecompileParser.Shared.Lib.Services
+@using ACDecompileParser.Shared.Lib.Models
+@using ACDecompileParser.Shared.Lib.Storage
+@using ACDecompileParser.Shared.Lib.Output
+@using Microsoft.AspNetCore.Components.Routing
+@using Microsoft.JSInterop
+@inject ITypeHierarchyService TypeHierarchyService
+@inject ITypeRepository TypeRepository
+@inject HierarchyRuleEngine RuleEngine
+@inject HierarchyTreeBuilder TreeBuilder
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
+@implements IDisposable
+
+<div class="file-tree" style="height: 100%; display: flex; flex-direction: column;">
+    <div class="file-tree-header" style="flex-shrink: 0;">
+        <h3>Explorer</h3>
+        <input type="text" @bind="SearchTerm" @bind:event="oninput" placeholder="Search types..." class="form-control mb-2"/>
+    </div>
+    <div class="file-tree-content" style="flex-grow: 1; overflow-y: auto; min-height: 0;">
+
+        @if (_rootNode == null)
+        {
+            <p>Loading...</p>
+        }
+        else
+        {
+            <ul class="tree-list">
+                @RenderNode(_rootNode)
+            </ul>
+        }
+    </div>
+</div>
+
+@code {
+    private HierarchyNode? _rootNode;
+
+    // Default expanded nodes: Top level categories
+    private HashSet<string> _expandedNodes = new();
+    private string _searchTerm = "";
+    private string? _scrollToTypeId = null;
+    private bool _shouldScroll = false;
+
+    public string SearchTerm
+    {
+        get => _searchTerm;
+        set
+        {
+            _searchTerm = value;
+            LoadData(); // Reload/filter data when search changes
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        LoadData();
+        NavigationManager.LocationChanged += OnLocationChanged;
+        ExpandPathToCurrentType();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_shouldScroll && !string.IsNullOrEmpty(_scrollToTypeId))
+        {
+            _shouldScroll = false;
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("scrollToElement", _scrollToTypeId);
+            }
+            catch
+            {
+                // Ignore JS interop errors (e.g., during prerendering)
+            }
+        }
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        ExpandPathToCurrentType();
+        StateHasChanged();
+    }
+
+    private void ExpandPathToCurrentType()
+    {
+        // Parse the current URL to extract type information
+        var uri = new Uri(NavigationManager.Uri);
+        var path = uri.AbsolutePath;
+
+        // Check if we're on a /type/{*Path} route
+        if (!path.StartsWith("/type/", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        var typePath = path.Substring("/type/".Length);
+        if (string.IsNullOrEmpty(typePath))
+        {
+            return;
+        }
+
+        // Parse namespace and base name (same logic as TypeViewer)
+        var segments = typePath.Split('/');
+        var baseName = segments.Last();
+        var ns = segments.Length > 1 ? string.Join("::", segments.Take(segments.Length - 1)) : string.Empty;
+
+        // Get the type from repository
+        var types = TypeRepository.GetTypesForGroup(baseName, ns);
+        var type = types.FirstOrDefault();
+        if (type == null)
+        {
+            return;
+        }
+
+        // Calculate the physical path using HierarchyRuleEngine
+        var location = RuleEngine.CalculateLocation(type);
+        var physicalPath = location.Path;
+
+        // Expand all parent nodes
+        if (!string.IsNullOrEmpty(physicalPath))
+        {
+            var pathParts = physicalPath.Split('/');
+            var currentPath = "";
+            foreach (var part in pathParts)
+            {
+                currentPath = string.IsNullOrEmpty(currentPath) ? part : $"{currentPath}/{part}";
+                _expandedNodes.Add(currentPath);
+            }
+        }
+
+        // Set scroll target
+        _scrollToTypeId = GetTypeElementId(baseName, ns);
+        _shouldScroll = true;
+    }
+
+    private string GetTypeElementId(string baseName, string ns)
+    {
+        // Create a unique, sanitized ID for the type element
+        var fullName = string.IsNullOrEmpty(ns) ? baseName : $"{ns}::{baseName}";
+        return "type-" + fullName.Replace("::", "-").Replace("<", "_").Replace(">", "_").Replace(" ", "");
+    }
+
+    public void Dispose()
+    {
+        NavigationManager.LocationChanged -= OnLocationChanged;
+    }
+
+    private void LoadData()
+    {
+        List<TypeModel> allTypes;
+        if (string.IsNullOrWhiteSpace(SearchTerm))
+        {
+            allTypes = TypeRepository.GetAllTypes(includeIgnored: false);
+        }
+        else
+        {
+            allTypes = TypeRepository.SearchTypes(SearchTerm, includeIgnored: false);
+        }
+
+        // Filter out internal types starting with $
+        allTypes = allTypes.Where(t => !t.BaseName.StartsWith("$")).ToList();
+
+        var grouped = TypeHierarchyService.GroupTypesByBaseNameAndNamespace(allTypes, RuleEngine);
+        _rootNode = TreeBuilder.BuildTree(grouped);
+
+        // Auto-expand namespaces if searching
+        if (!string.IsNullOrWhiteSpace(SearchTerm))
+        {
+            AutoExpand(_rootNode);
+        }
+    }
+
+    private void AutoExpand(HierarchyNode node)
+    {
+        // If searching, expand everything that has children
+        if (node.Children.Any() || node.Items.Any())
+        {
+            _expandedNodes.Add(node.FullPath);
+            foreach (var child in node.Children.Values)
+            {
+                AutoExpand(child);
+            }
+        }
+    }
+
+    private bool IsExpanded(string key) => _expandedNodes.Contains(key);
+
+    private void ToggleExpand(string key)
+    {
+        if (_expandedNodes.Contains(key))
+            _expandedNodes.Remove(key);
+        else
+            _expandedNodes.Add(key);
+    }
+
+    private string GetTypeUrl(List<TypeModel> variations, string outputFileName)
+    {
+        // Try to find the type that matches the output filename first
+        var mainType = variations.FirstOrDefault(t => t.BaseName == outputFileName)
+                       ?? variations.FirstOrDefault();
+
+        if (mainType == null) return "#";
+
+        var baseName = mainType.BaseName;
+        var ns = mainType.Namespace;
+
+        if (string.IsNullOrEmpty(ns))
+        {
+            return $"/type/{baseName}";
+        }
+
+        return $"/type/{ns.Replace("::", "/")}/{baseName}";
+    }
+
+    // Recursive render fragment for tree nodes
+    private RenderFragment RenderNode(HierarchyNode node) => builder =>
+    {
+        // Render folders (children)
+        foreach (var childKey in node.Children.Keys.OrderBy(k => k))
+        {
+            var childNode = node.Children[childKey];
+            var expandKey = childNode.FullPath;
+            var isExpanded = IsExpanded(expandKey) || !string.IsNullOrWhiteSpace(SearchTerm);
+
+            builder.OpenElement(0, "li");
+
+            builder.OpenElement(1, "span");
+            builder.AddAttribute(2, "class", "caret " + (isExpanded ? "caret-down" : ""));
+            builder.AddAttribute(3, "onclick", Microsoft.AspNetCore.Components.EventCallback.Factory.Create(this, () => ToggleExpand(expandKey)));
+            builder.AddContent(4, childNode.Name);
+            builder.CloseElement(); // span
+
+            if (isExpanded)
+            {
+                builder.OpenElement(5, "ul");
+                builder.AddAttribute(6, "class", "nested active");
+                builder.AddContent(7, RenderNode(childNode));
+                builder.CloseElement(); // ul
+            }
+
+            builder.CloseElement(); // li
+        }
+
+        // Render items (types) in this folder
+        foreach (var group in node.Items.OrderBy(g => g.OutputFileName))
+        {
+            var firstType = group.Types.FirstOrDefault();
+            var typeId = firstType != null ? GetTypeElementId(firstType.BaseName, firstType.Namespace) : "";
+
+            builder.OpenElement(10, "li");
+            builder.AddAttribute(11, "id", typeId);
+            builder.OpenComponent<Microsoft.AspNetCore.Components.Routing.NavLink>(12);
+            builder.AddAttribute(13, "class", "nav-link");
+            builder.AddAttribute(14, "href", GetTypeUrl(group.Types, group.OutputFileName));
+            builder.AddAttribute(15, "onclick", "closeSidebar()");
+            builder.AddAttribute(16, "ChildContent", (RenderFragment)((childBuilder) =>
+            {
+                childBuilder.OpenElement(17, "span");
+                childBuilder.AddAttribute(18, "class", "oi oi-file");
+                childBuilder.AddAttribute(19, "aria-hidden", "true");
+                childBuilder.CloseElement();
+                childBuilder.AddContent(20, " " + group.OutputFileName);
+            }));
+            builder.CloseComponent();
+            builder.CloseElement(); // li
+        }
+    };
+
+}
+
+}
+
+}
+
+<style>
+    .tree-list, .nested {
+        list-style-type: none;
+        padding-left: 20px;
+    }
+    .caret {
+        cursor: pointer;
+        user-select: none;
+        font-weight: bold;
+        color: var(--file-tree-caret);
+        font-size: 0.85rem;
+    }
+    .caret::before {
+        content: "\25B6";
+        color: var(--file-tree-caret);
+        display: inline-block;
+        margin-right: 6px;
+    }
+    .caret-down::before {
+        transform: rotate(90deg);
+    }
+    .nested {
+        display: none;
+    }
+    .active {
+        display: block;
+    }
+    .nav-link {
+        padding: 0.2rem 0.5rem;
+        color: var(--file-tree-link);
+        text-decoration: none;
+        border-radius: 4px;
+        transition: background-color 0.2s ease, color 0.2s ease;
+        font-size: 0.85rem;
+    }
+    .nav-link:hover {
+        background-color: var(--file-tree-link-hover-bg);
+    }
+    .nav-link.active {
+        background-color: var(--file-tree-link-active-bg);
+        color: var(--file-tree-link-active-text);
+    }
+    .file-tree {
+        background-color: var(--file-tree-bg);
+        color: var(--file-tree-text);
+        transition: background-color 0.3s ease, color 0.3s ease;
+        font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    }
+    .file-tree-header {
+        padding: 10px 10px 0 10px;
+    }
+    .file-tree-content {
+        padding: 10px;
+    }
+    .file-tree h3 {
+        color: var(--file-tree-text);
+        margin-bottom: 1rem;
+        font-size: 1rem;
+    }
+    .file-tree .form-control {
+        background-color: var(--bg-secondary);
+        color: var(--text-primary);
+        border-color: var(--border-color);
+        transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+        font-size: 0.85rem;
+    }
+    .file-tree .form-control::placeholder {
+        color: var(--text-tertiary);
+    }
+    .file-tree .form-control:focus {
+        background-color: var(--bg-primary);
+        color: var(--text-primary);
+        border-color: var(--link-color);
+    }
+</style>

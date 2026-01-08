@@ -1,0 +1,210 @@
+.page {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    height: 100vh;
+    transition: background-color 0.3s ease, color 0.3s ease;
+    overflow: hidden;
+}
+
+main {
+    flex: 1;
+    overflow: hidden;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+article.content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 0;
+}
+
+
+.sidebar {
+    background-image: var(--sidebar-bg);
+    transition: background-image 0.3s ease;
+}
+
+
+.top-row {
+    background-color: var(--top-row-bg);
+    border-bottom: 1px solid var(--top-row-border);
+    justify-content: flex-end;
+    height: 3.5rem;
+    display: flex;
+    align-items: center;
+    transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+
+.top-row-content {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    width: 100%;
+    justify-content: flex-end;
+}
+
+
+.top-row ::deep a,
+.top-row ::deep .btn-link {
+    white-space: nowrap;
+    margin-left: 1.5rem;
+    text-decoration: none;
+}
+
+.top-row ::deep a:hover,
+.top-row ::deep .btn-link:hover {
+    text-decoration: underline;
+}
+
+.top-row ::deep a:first-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+@media (max-width: 640.98px) {
+    .top-row {
+        justify-content: space-between;
+    }
+
+    .top-row ::deep a,
+    .top-row ::deep .btn-link {
+        margin-left: 0;
+    }
+
+    /* Hamburger menu button - visible only on mobile */
+    .hamburger-menu {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-around;
+        width: 2rem;
+        height: 2rem;
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        padding: 0.25rem;
+        position: fixed;
+        top: 0.75rem;
+        left: 1rem;
+        z-index: 1002;
+    }
+
+    .hamburger-menu span {
+        width: 100%;
+        height: 0.2rem;
+        background-color: var(--text-primary);
+        border-radius: 2px;
+        transition: all 0.3s ease;
+    }
+
+    .hamburger-menu:hover span {
+        background-color: var(--link-color);
+    }
+
+    /* Sidebar as overlay on mobile */
+    .sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        height: 100vh;
+        width: 90vw;
+        max-width: 450px;
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+        z-index: 1001;
+        box-shadow: 2px 0 8px var(--shadow-color);
+    }
+
+    .sidebar.open {
+        transform: translateX(0);
+    }
+
+    /* Backdrop overlay */
+    .sidebar-backdrop {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        z-index: 1000;
+        transition: opacity 0.3s ease;
+    }
+
+    .sidebar-backdrop.active {
+        display: block;
+    }
+}
+
+
+@media (min-width: 641px) {
+    .page {
+        flex-direction: row;
+    }
+
+    /* Hide hamburger menu on desktop */
+    .hamburger-menu {
+        display: none;
+    }
+
+    /* Hide backdrop on desktop */
+    .sidebar-backdrop {
+        display: none !important;
+    }
+
+    .sidebar {
+        width: 450px;
+        height: 100vh;
+        position: sticky;
+        top: 0;
+        overflow-y: auto;
+    }
+
+
+    .top-row {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+    }
+
+    .top-row.auth ::deep a:first-child {
+        flex: 1;
+        text-align: right;
+        width: 0;
+    }
+
+    .top-row,
+    article {
+        padding-left: 2rem !important;
+        padding-right: 1.5rem !important;
+    }
+}
+
+#blazor-error-ui {
+    color-scheme: light only;
+    background: lightyellow;
+    bottom: 0;
+    box-shadow: 0 -1px 2px rgba(0, 0, 0, 0.2);
+    box-sizing: border-box;
+    display: none;
+    left: 0;
+    padding: 0.6rem 1.25rem 0.7rem 1.25rem;
+    position: fixed;
+    width: 100%;
+    z-index: 1000;
+}
+
+#blazor-error-ui .dismiss {
+    cursor: pointer;
+    position: absolute;
+    right: 0.75rem;
+    top: 0.5rem;
+}

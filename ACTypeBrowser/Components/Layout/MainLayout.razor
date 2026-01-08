@@ -1,0 +1,52 @@
+﻿@using ACTypeBrowser.Services
+@inherits LayoutComponentBase
+@inject ThemeService ThemeService
+@implements IDisposable
+
+
+<div class="page @ThemeService.CurrentTheme">
+    <HighlightTheme/>
+    <button class="hamburger-menu" onclick="toggleSidebar()" aria-label="Toggle sidebar">
+        <span></span>
+        <span></span>
+        <span></span>
+    </button>
+
+    <div class="sidebar-backdrop" onclick="closeSidebar()"></div>
+
+    <div class="sidebar" id="sidebar">
+        <FileTree/>
+    </div>
+
+    <main>
+        <div class="top-row px-4">
+            <div class="top-row-content">
+                <ThemeToggle/>
+            </div>
+        </div>
+
+        <article class="content px-4">
+            @Body
+        </article>
+    </main>
+</div>
+
+<div id="blazor-error-ui" data-nosnippet>
+    An unhandled error has occurred.
+    <a href="." class="reload">Reload</a>
+    <span class="dismiss">🗙</span>
+</div>
+
+@code {
+
+    protected override void OnInitialized()
+    {
+        ThemeService.OnThemeChanged += StateHasChanged;
+    }
+
+    public void Dispose()
+    {
+        ThemeService.OnThemeChanged -= StateHasChanged;
+    }
+
+}

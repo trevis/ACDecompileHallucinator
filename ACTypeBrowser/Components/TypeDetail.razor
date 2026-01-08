@@ -1,0 +1,392 @@
+@using ACDecompileParser.Shared.Lib.Output
+@using ACDecompileParser.Shared.Lib.Output.CSharp
+@using ACDecompileParser.Shared.Lib.Models
+@using ACDecompileParser.Shared.Lib.Output.Models
+@using ACDecompileParser.Shared.Lib.Services
+@using Microsoft.AspNetCore.Components.Routing
+@inject NavigationManager NavigationManager
+@inject TypeLookupCache LookupCache
+@inject TypeGroupProcessor GroupProcessor
+@inject CSharpGroupProcessor CSharpProcessor
+@inject IJSRuntime JSRuntime
+
+<div class="type-detail p-4">
+    @if (TypeGroup == null || !TypeGroup.Any())
+    {
+        <p>Select a type to view details.</p>
+    }
+    else
+    {
+        var firstType = TypeGroup.First();
+        var title = !string.IsNullOrEmpty(Title) ? Title : firstType.BaseName;
+        if (TypeGroup.Count > 1)
+        {
+            title += $" ({TypeGroup.Count} variations)";
+        }
+
+        <h3>
+            @if (TypeGroup.Count == 1)
+            {
+                <span class="badge bg-secondary me-2">@firstType.Type</span>
+            }
+            @title
+        </h3>
+
+        <ul class="nav nav-tabs mb-3">
+            <li class="nav-item">
+
+                <a class="nav-link @(_activeTab == "definition" ? "active" : "")"
+                   @onclick='() => SelectTab("definition")'
+                   style="cursor: pointer;">
+                    Definition
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link @(_activeTab == "raw" ? "active" : "")"
+                   @onclick='() => SelectTab("raw")'
+                   style="cursor: pointer;">
+                    Raw
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link @(_activeTab == "csharp" ? "active" : "")"
+                   @onclick='() => SelectTab("csharp")'
+                   style="cursor: pointer;">
+                    C#
+                </a>
+            </li>
+            @if (TypeGroup.Any(t => t.StaticVariables?.Any() == true))
+            {
+                <li class="nav-item">
+                    <a class="nav-link @(_activeTab == "statics" ? "active" : "")"
+                       @onclick='() => SelectTab("statics")'
+                       style="cursor: pointer;">
+                        Statics
+                    </a>
+                </li>
+            }
+        </ul>
+
+        @if (_activeTab == "definition")
+        {
+            <div class="code-view mt-3">
+                <pre><code class="nohighlight">@RenderTokens()</code></pre>
+            </div>
+        }
+        else if (_activeTab == "statics")
+        {
+            <div class="statics-view mt-3">
+                <table class="table table-dark table-hover table-sm">
+                    <thead>
+                    <tr>
+                        <th>Address</th>
+                        <th>Type</th>
+                        <th>Name</th>
+                        <th>Value</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var type in TypeGroup)
+                    {
+                        @if (type.StaticVariables != null)
+                        {
+                            @foreach (var sv in type.StaticVariables)
+                            {
+                                <tr>
+                                    <td class="text-muted">
+                                        <code>@NormalizeAddress(sv.Address)</code>
+                                    </td>
+                                    <td>
+                                        <code>@sv.TypeString</code>
+                                    </td>
+                                    <td class="text-info">
+                                        <code>@sv.Name</code>
+                                    </td>
+                                    <td>
+                                        <code>@sv.Value</code>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+        else if (_activeTab == "csharp")
+        {
+            <div class="code-view mt-3">
+                <pre><code class="language-csharp">@RenderCSharpBindings()</code></pre>
+            </div>
+        }
+        else
+        {
+            <div class="code-view mt-3">
+                @foreach (var type in TypeGroup)
+                {
+                    <div class="mb-4">
+                        @if (TypeGroup.Count > 1)
+                        {
+                            <h5>@type.NameWithTemplates</h5>
+                        }
+                        <pre><code class="language-cpp">@type.Source</code></pre>
+                    </div>
+                }
+            </div>
+        }
+    }
+</div>
+
+<style>
+    .type-detail {
+        background-color: var(--bg-primary);
+        color: var(--text-primary);
+        transition: background-color 0.3s ease, color 0.3s ease;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    /* Remove padding on mobile for more screen space */
+    @@media (max-width: 640.98px) {
+        .type-detail {
+            padding: 0.5rem !important;
+        }
+        
+        article.content {
+            padding-left: 0.5rem !important;
+            padding-right: 0.5rem !important;
+        }
+    }
+    
+    .type-detail h3 {
+        color: var(--text-primary);
+        font-size: 1.5rem;
+        font-weight: 600;
+        margin-bottom: 1.5rem;
+        padding-bottom: 0.75rem;
+        border-bottom: 2px solid var(--border-color);
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .type-detail h3 .badge {
+        font-size: 0.7rem;
+        font-weight: 500;
+        padding: 0.35rem 0.65rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    .nav-tabs {
+        border-bottom: 2px solid var(--border-color);
+        margin-bottom: 1.5rem;
+    }
+
+    .nav-tabs .nav-item {
+        margin-bottom: -2px;
+    }
+
+    .nav-tabs .nav-link {
+        border: none;
+        border-bottom: 2px solid transparent;
+        color: var(--text-secondary);
+        padding: 0.75rem 1.25rem;
+        font-weight: 500;
+        font-size: 0.95rem;
+        transition: all 0.2s ease;
+        background: transparent;
+    }
+
+    .nav-tabs .nav-link:hover {
+        color: var(--link-color);
+        border-bottom-color: var(--link-color);
+        background: transparent;
+    }
+
+    .nav-tabs .nav-link.active {
+        color: var(--link-color);
+        border-bottom-color: var(--link-color);
+        background: transparent;
+        font-weight: 600;
+    }
+    
+    
+    .code-view {
+        background-color: var(--code-bg);
+        color: var(--code-text);
+        padding: 1.25rem;
+        border-radius: 6px;
+        overflow-x: auto;
+        font-family: 'Consolas', 'Monaco', monospace;
+        font-size: 0.9rem;
+        transition: background-color 0.3s ease, color 0.3s ease;
+        border: 1px solid var(--border-color);
+        max-width: 100%;
+        flex: 1;
+        overflow: auto;
+        min-height: 0;
+    }
+    
+    .statics-view {
+        flex: 1;
+        overflow: auto;
+        min-height: 0;
+    }
+
+    .code-view pre {
+        margin: 0;
+        white-space: pre;
+        overflow-x: auto;
+    }
+
+    .code-view code {
+        display: block;
+        white-space: pre;
+    }
+
+    .code-view h5 {
+        color: var(--text-primary);
+        font-size: 1rem;
+        font-weight: 600;
+        margin-bottom: 0.75rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 1px solid var(--border-color);
+        white-space: normal;
+        overflow-wrap: break-word;
+    }
+
+    
+    .token-keyword { 
+        color: var(--token-keyword);
+    }
+    
+    .token-typename { 
+        color: var(--token-typename);
+    }
+    
+    .token-string { 
+        color: var(--token-string);
+    }
+    
+    .token-comment { 
+        color: var(--token-comment);
+    }
+    
+    .token-number { 
+        color: var(--token-number);
+    }
+    
+    .token-punctuation { 
+        color: var(--token-punctuation);
+    }
+    
+    .token-identifier { 
+        color: var(--token-identifier);
+    }
+    
+    a.type-link {
+        color: var(--type-link);
+        text-decoration: underline;
+        cursor: pointer;
+        transition: color 0.2s ease;
+    }
+    
+    a.type-link:hover {
+        color: var(--type-link-hover);
+    }
+</style>
+
+
+@code {
+    [Parameter] public List<TypeModel>? TypeGroup { get; set; }
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public string? ActiveTab { get; set; }
+
+    private string _activeTab = "definition";
+
+    protected override void OnParametersSet()
+    {
+        _activeTab = !string.IsNullOrEmpty(ActiveTab) ? ActiveTab : "definition";
+        // LookupCache is lazily loaded on first access - no expensive GetAllTypes() call needed
+    }
+
+    private void SelectTab(string tab)
+    {
+        NavigationManager.NavigateTo(NavigationManager.GetUriWithQueryParameter("tab", tab));
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        await JSRuntime.InvokeVoidAsync("hljs.highlightAll");
+    }
+
+    private RenderFragment RenderTokens() => builder =>
+    {
+        if (TypeGroup == null || !TypeGroup.Any()) return;
+
+        var tokens = GroupProcessor.GenerateGroupTokens(TypeGroup, includeHeaderAndNamespace: false);
+        int seq = 0;
+        foreach (var token in tokens)
+        {
+            if (!string.IsNullOrEmpty(token.ReferenceId) && int.TryParse(token.ReferenceId, out int id))
+            {
+                string href = "#";
+                if (LookupCache.TryGetEntry(id, out var entry) && entry != null)
+                {
+                    href = string.IsNullOrEmpty(entry.Namespace)
+                        ? $"/type/{entry.BaseName}"
+                        : $"/type/{entry.Namespace.Replace("::", "/")}/{entry.BaseName}";
+                }
+
+                builder.OpenElement(seq++, "a");
+                builder.AddAttribute(seq++, "href", href);
+                builder.AddAttribute(seq++, "class", $"type-link {GetTokenClass(token.Type)}");
+                builder.AddContent(seq++, token.Text);
+                builder.CloseElement();
+            }
+            else
+            {
+                builder.OpenElement(seq++, "span");
+                builder.AddAttribute(seq++, "class", GetTokenClass(token.Type));
+                builder.AddContent(seq++, token.Text);
+                builder.CloseElement();
+            }
+        }
+    };
+
+    private string GetTokenClass(TokenType type) => type switch
+    {
+        TokenType.Keyword => "token-keyword",
+        TokenType.TypeName => "token-typename",
+        TokenType.StringLiteral => "token-string",
+        TokenType.Comment => "token-comment",
+        TokenType.NumberLiteral => "token-number",
+        TokenType.Punctuation => "token-punctuation",
+        TokenType.Identifier => "token-identifier",
+        _ => ""
+    };
+
+    private string NormalizeAddress(string address)
+    {
+        if (string.IsNullOrEmpty(address)) return address;
+        string clean = address.StartsWith("0x", StringComparison.OrdinalIgnoreCase) ? address.Substring(2) : address;
+        if (long.TryParse(clean, System.Globalization.NumberStyles.HexNumber, null, out long val))
+        {
+            return $"0x{val:X8}";
+        }
+
+        return address;
+    }
+
+    private string RenderCSharpBindings()
+    {
+        if (TypeGroup == null || !TypeGroup.Any())
+            return string.Empty;
+
+        return CSharpProcessor.GenerateGroupContent(TypeGroup, includeNamespace: false);
+    }
+
+}

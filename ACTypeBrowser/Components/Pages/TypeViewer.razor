@@ -1,0 +1,78 @@
+@page "/type/{*Path}"
+@using ACDecompileParser.Shared.Lib.Models
+@using ACDecompileParser.Shared.Lib.Storage
+@using ACDecompileParser.Shared.Lib.Services
+@using ACTypeBrowser.Components
+@inject ITypeRepository TypeRepository
+
+<PageTitle>@(string.IsNullOrEmpty(_baseName) ? "Type Viewer" : _baseName)</PageTitle>
+
+@if (_typeGroup == null || _typeGroup.Count == 0)
+{
+    @if (_notFound)
+    {
+        <div class="p-4">
+            <p>Type not found: <code>@Path</code></p>
+        </div>
+    }
+    else
+    {
+        <p class="p-4">Loading...</p>
+    }
+}
+else
+{
+    <TypeDetail TypeGroup="_typeGroup" Title="@_baseName" ActiveTab="@Tab"/>
+}
+
+@code {
+    [Parameter] public string? Path { get; set; }
+    [SupplyParameterFromQuery] public string? Tab { get; set; }
+
+    private List<TypeModel>? _typeGroup;
+    private string? _baseName;
+    private bool _notFound = false;
+    private string? _lastLoadedPath;
+
+    protected override void OnParametersSet()
+    {
+        // specific optimization: if path hasn't changed, don't reload data
+        if (Path == _lastLoadedPath && _typeGroup != null)
+        {
+            return;
+        }
+
+        _notFound = false;
+        _typeGroup = null;
+        _lastLoadedPath = Path;
+
+        if (string.IsNullOrEmpty(Path))
+        {
+            _notFound = true;
+            return;
+        }
+
+        // Parse path: Namespace/BaseName
+        // If Path is "AC1Legacy/PSRefBuffer", Namespace is "AC1Legacy", BaseName is "PSRefBuffer"
+        // If Path is just "PSRefBuffer", Namespace is "", BaseName is "PSRefBuffer"
+        var segments = Path.Split('/');
+        _baseName = segments.Last();
+        var ns = segments.Length > 1 ? string.Join("::", segments.Take(segments.Length - 1)) : string.Empty;
+
+        // Load types for this group using the optimized query
+        var group = TypeRepository.GetTypesForGroup(_baseName, ns);
+
+        // Sort them for consistency (optional but good for UI)
+        _typeGroup = group.OrderBy(t => t.NameWithTemplates).ToList();
+
+        if (_typeGroup.Count > 0)
+        {
+            // Found
+        }
+        else
+        {
+            _notFound = true;
+        }
+    }
+
+}

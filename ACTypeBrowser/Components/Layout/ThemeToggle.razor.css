@@ -1,0 +1,38 @@
+.theme-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: var(--theme-toggle-bg);
+    border: 1px solid var(--theme-toggle-border);
+    border-radius: 0.5rem;
+    color: var(--theme-toggle-color);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.theme-toggle:hover {
+    background: var(--theme-toggle-hover-bg);
+    border-color: var(--theme-toggle-hover-border);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px var(--shadow-color);
+}
+
+.theme-toggle:active {
+    transform: translateY(0);
+}
+
+.theme-toggle svg {
+    flex-shrink: 0;
+    transition: transform 0.3s ease;
+}
+
+.theme-toggle:hover svg {
+    transform: rotate(20deg);
+}
+
+.theme-label {
+    white-space: nowrap;
+}

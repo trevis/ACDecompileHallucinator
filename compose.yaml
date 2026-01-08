@@ -1,0 +1,14 @@
+﻿services:
+  actypebrowser:
+    image: actypebrowser
+    build:
+      context: .
+      dockerfile: ACTypeBrowser/Dockerfile
+
+    ports:
+      - "5000:8080"
+    volumes:
+      - ./out/types.db:/data/types.db:ro
+    environment:
+      ACTYPEBROWSER_DB_PATH: /data/types.db
+      
