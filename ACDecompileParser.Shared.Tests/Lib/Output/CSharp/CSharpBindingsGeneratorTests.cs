@@ -239,7 +239,7 @@ public class CSharpBindingsGeneratorTests
 
         Assert.Contains("public unsafe struct ACRender", output);
         Assert.Contains(": System.IDisposable", output);
-        Assert.Contains("public Render BaseClass_Render;", output);
+        Assert.Contains("public ACBindings.Render BaseClass_Render;", output);
 
         // Constructor mapping
         Assert.Contains("public ACRender(int index)", output);
@@ -251,13 +251,14 @@ public class CSharpBindingsGeneratorTests
 
         // Verify pulled methods
         // Set3DView is Cdecl (Static), so wrapper should be static and call Type.Method
-        Assert.Contains("public static int Set3DView(int x, int y) => Render.Set3DView(x, y);", output);
+        Assert.Contains("public static int Set3DView(int x, int y) => ACBindings.Render.Set3DView(x, y);", output);
 
         // Set3DViewInternal is Thiscall (Instance), so wrapper is instance and calls BaseField.Method
         // Note: arguments for wrapper call do NOT include 'ref this' explicitly in C# call syntax
         Assert.Contains("public int Set3DViewInternal(int x, int y) => BaseClass_Render.Set3DViewInternal(x, y);",
             output);
     }
+
     [Fact]
     public void Test_Using_Namespace_Replacement()
     {
@@ -326,15 +327,15 @@ public class CSharpBindingsGeneratorTests
 
         // Verify namespace replacement in member types
         Assert.Contains("public void* m_ptr;", output); // Pointers are always void* but MapType handles it
-        Assert.Contains("public Core.Value m_val;", output);
+        Assert.Contains("public ACBindings.Core.Value m_val;", output);
 
         // Verify namespace replacement in base class
-        Assert.Contains("public Core.Base BaseClass_Core_Base;", output);
+        Assert.Contains("public ACBindings.Core.Base BaseClass_Core_Base;", output);
 
         // Verify namespace replacement in return types
         Assert.Contains("public void* GetBase()", output);
 
         // Verify pulled up static method
-        Assert.Contains("public static int StaticMethod() => Core.Base.StaticMethod();", output);
+        Assert.Contains("public static int StaticMethod() => ACBindings.Core.Base.StaticMethod();", output);
     }
 }

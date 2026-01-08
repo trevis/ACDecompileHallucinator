@@ -116,9 +116,15 @@ public class CSharpBindingsGenerator
             sb.AppendLine($"{memberIndent}// Base Classes");
             foreach (var bt in type.BaseTypes)
             {
-                string baseTypeName =
-                    (bt.RelatedType?.BaseName ?? bt.RelatedTypeString ?? "Unknown").Replace("::", ".");
-                string fieldName = $"BaseClass_{baseTypeName.Replace(".", "_")}";
+                TypeModel fallbackRelated = new TypeModel { BaseName = bt.RelatedTypeString ?? "Unknown" };
+                TypeModel resolvedType = bt.RelatedType ?? fallbackRelated;
+                string baseTypeName = GetFullyQualifiedName(resolvedType);
+
+                // Use a consistent sanitized field name based on FQN
+                string rawFqn = resolvedType.FullyQualifiedName;
+                if (string.IsNullOrEmpty(rawFqn) || rawFqn == "Unknown") rawFqn = bt.RelatedTypeString ?? "Unknown";
+
+                string fieldName = $"BaseClass_{rawFqn.Replace("::", ".").Replace(".", "_")}";
                 sb.AppendLine($"{memberIndent}public {baseTypeName} {fieldName}; // {baseTypeName}");
             }
 
@@ -232,8 +238,9 @@ public class CSharpBindingsGenerator
 
             if (related != null)
             {
-                string baseName = related.BaseName;
-                map[baseName] = related;
+                // Use FullyQualifiedName as key to avoid name collisions across namespaces
+                string key = related.FullyQualifiedName;
+                map[key] = related;
             }
         }
 
@@ -276,6 +283,22 @@ public class CSharpBindingsGenerator
         }
 
         return false;
+    }
+
+    private string GetFullyQualifiedName(TypeModel type)
+    {
+        if (type == null) return "ACBindings.Unknown";
+
+        string ns = type.Namespace ?? string.Empty;
+        string baseName = (type.BaseName ?? "Unknown").Replace("::", ".");
+        string fqn;
+
+        if (string.IsNullOrEmpty(ns))
+            fqn = baseName;
+        else
+            fqn = $"{ns.Replace("::", ".")}.{baseName}";
+
+        return $"ACBindings.{fqn}";
     }
 
     // Combined list of methods: Self methods + Unique Base methods
@@ -419,7 +442,10 @@ public class CSharpBindingsGenerator
                 // Check if base has dispose
                 if (HasDestructorInHierarchy(basePair.Value))
                 {
-                    sb.AppendLine($"{indent}    BaseClass_{basePair.Key}.Dispose();");
+                    string key = basePair.Key;
+                    // Sanitize key (which is FQN) for field name
+                    string fieldName = $"BaseClass_{key.Replace("::", ".").Replace(".", "_")}";
+                    sb.AppendLine($"{indent}    {fieldName}.Dispose();");
                 }
             }
         }
@@ -655,7 +681,7 @@ public class CSharpBindingsGenerator
             // So: `public static int Set3DView(...) => SourceType.Set3DView(...)`.
 
             sb.Append($"{indent}public static {returnType} {methodName}({paramsStr}) => ");
-            sb.AppendLine($"{sourceType.BaseName.Replace("::", ".")}.{methodName}({callArgsStr});");
+            sb.AppendLine($"{GetFullyQualifiedName(sourceType)}.{methodName}({callArgsStr});");
         }
         else
         {
@@ -681,7 +707,7 @@ public class CSharpBindingsGenerator
         var callArgs = new List<string>();
 
         // Add ref this as first delegate parameter
-        delegateParams.Add($"ref {sourceType.BaseName.Replace("::", ".")}");
+        delegateParams.Add($"ref {GetFullyQualifiedName(sourceType)}");
         callArgs.Add("ref this"); // Default for own
 
         // Skip first parameter if it's 'this'
@@ -723,8 +749,8 @@ public class CSharpBindingsGenerator
             string wrapperCallArgsStr = string.Join(", ", wrapperCallArgs);
 
             sb.Append($"{indent}public {returnType} {methodName}({paramsStr}) => ");
-            // Base Class Field Name
-            string baseField = $"BaseClass_{sourceType.BaseName.Replace("::", "_")}";
+            // Base Class Field Name - Must match convention in GenerateStruct using FQN
+            string baseField = $"BaseClass_{sourceType.FullyQualifiedName.Replace("::", ".").Replace(".", "_")}";
             sb.AppendLine($"{baseField}.{methodName}({wrapperCallArgsStr});");
         }
         else

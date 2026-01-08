@@ -163,7 +163,7 @@ public static class PrimitiveTypeMappings
 
         // If not found, return the original (might be a custom type)
         // For custom types in C# bindings, we'll assume they're defined elsewhere
-        return baseType.Replace("::", ".");
+        return "ACBindings." + baseType.Replace("::", ".");
     }
 
     /// <summary>
@@ -199,7 +199,7 @@ public static class PrimitiveTypeMappings
         }
 
         // Custom type pointer
-        return baseType.Replace("::", ".") + "*";
+        return "ACBindings." + baseType.Replace("::", ".") + "*";
     }
 
     /// <summary>
@@ -364,7 +364,7 @@ public static class PrimitiveTypeMappings
             // Recursively map the first argument using base MapType (for the element type)
             string mappedFirstArg = MapType(firstArg);
 
-            string result = $"PrimitiveInplaceArray<{mappedFirstArg}>";
+            string result = $"ACBindings.PrimitiveInplaceArray<{mappedFirstArg}>";
             if (forStaticPointer) result += "*";
             return result;
         }
