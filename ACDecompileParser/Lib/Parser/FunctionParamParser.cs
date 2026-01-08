@@ -260,21 +260,25 @@ public class FunctionParamParser
 
         return parameters;
     }
-
     /// <summary>
     /// Parses a nested function pointer to create a FunctionSignatureModel
     /// </summary>
     private static (FunctionSignatureModel Signature, string RawParam)? ParseNestedFunctionSignature(string param,
         int position, string? file = null, int? lineNumber = null, string? source = null)
     {
-        var (returnType, callingConvention, innerParams) = ParsingUtilities.ExtractFunctionPointerParameterInfo(param);
+        var (returnType, callingConvention, innerParams, extractedName) = ParsingUtilities.ExtractFunctionPointerParameterInfo(param);
 
         if (returnType == null)
             return null;
 
+        // Use extracted name if available, otherwise generate one
+        var funcName = !string.IsNullOrEmpty(extractedName)
+            ? extractedName
+            : $"__nested_funcptr{position + 1}";
+
         var funcSig = new FunctionSignatureModel
         {
-            Name = $"__nested_funcptr{position + 1}",
+            Name = funcName,
             ReturnType = ParsingUtilities.NormalizeTypeString(returnType),
             CallingConvention = callingConvention ?? string.Empty,
             ReturnTypeReference = TypeResolver.CreateTypeReference(returnType),
@@ -291,7 +295,6 @@ public class FunctionParamParser
 
         return (funcSig, param);
     }
-
     /// <summary>
     /// Renames duplicate parameter names by adding numeric suffixes (_1, _2, etc.)
     /// </summary>
