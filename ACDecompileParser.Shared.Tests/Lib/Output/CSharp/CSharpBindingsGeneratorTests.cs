@@ -1,6 +1,7 @@
 using ACDecompileParser.Shared.Lib.Models;
 using ACDecompileParser.Shared.Lib.Output.CSharp;
 using ACDecompileParser.Shared.Lib.Storage;
+using ACDecompileParser.Lib.Parser;
 using Moq;
 using Xunit;
 
