@@ -37,6 +37,9 @@ public class CSharpFileOutputGenerator
 
         Directory.CreateDirectory(outputDir);
 
+        // Write manual helper files to Manual/ subdirectory
+        WriteManualHelpers(outputDir);
+
         // Create lookup cache
         TypeLookupCache? lookupCache = null;
         if (_repository != null)
@@ -95,5 +98,17 @@ public class CSharpFileOutputGenerator
         }
 
         reporter?.Finish();
+    }
+
+    private static void WriteManualHelpers(string outputDir)
+    {
+        string manualDir = Path.Combine(outputDir, "Manual");
+        Directory.CreateDirectory(manualDir);
+
+        foreach (var (className, content) in ACDecompileParser.Shared.Lib.Constants.ManualHelpers.Helpers)
+        {
+            string filePath = Path.Combine(manualDir, $"{className}.cs");
+            File.WriteAllText(filePath, content);
+        }
     }
 }
