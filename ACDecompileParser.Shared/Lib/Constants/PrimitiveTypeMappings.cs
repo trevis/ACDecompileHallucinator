@@ -92,6 +92,8 @@ public static class PrimitiveTypeMappings
         { "intptr_t", "nint" },
         { "uintptr_t", "nuint" },
         { "DWORD_PTR", "nuint" },
+
+        { "IDClass<_tagDataID,32,0>", "uint" }
     };
 
     /// <summary>
@@ -155,7 +157,7 @@ public static class PrimitiveTypeMappings
 
         // If not found, return the original (might be a custom type)
         // For custom types in C# bindings, we'll assume they're defined elsewhere
-        return baseType;
+        return baseType.Replace("::", ".");
     }
 
     /// <summary>
@@ -185,7 +187,7 @@ public static class PrimitiveTypeMappings
         }
 
         // Custom type pointer
-        return baseType + "*";
+        return baseType.Replace("::", ".") + "*";
     }
 
     /// <summary>

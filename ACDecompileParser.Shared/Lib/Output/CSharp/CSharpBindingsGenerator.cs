@@ -80,8 +80,9 @@ public class CSharpBindingsGenerator
             sb.AppendLine($"{memberIndent}// Base Classes");
             foreach (var bt in type.BaseTypes)
             {
-                string baseTypeName = bt.RelatedType?.BaseName ?? bt.RelatedTypeString ?? "Unknown";
-                string fieldName = $"BaseClass_{baseTypeName}";
+                string baseTypeName =
+                    (bt.RelatedType?.BaseName ?? bt.RelatedTypeString ?? "Unknown").Replace("::", ".");
+                string fieldName = $"BaseClass_{baseTypeName.Replace(".", "_")}";
                 sb.AppendLine($"{memberIndent}public {baseTypeName} {fieldName}; // {baseTypeName}");
             }
 
@@ -618,7 +619,7 @@ public class CSharpBindingsGenerator
             // So: `public static int Set3DView(...) => SourceType.Set3DView(...)`.
 
             sb.Append($"{indent}public static {returnType} {methodName}({paramsStr}) => ");
-            sb.AppendLine($"{sourceType.BaseName}.{methodName}({callArgsStr});");
+            sb.AppendLine($"{sourceType.BaseName.Replace("::", ".")}.{methodName}({callArgsStr});");
         }
         else
         {
@@ -644,7 +645,7 @@ public class CSharpBindingsGenerator
         var callArgs = new List<string>();
 
         // Add ref this as first delegate parameter
-        delegateParams.Add($"ref {sourceType.BaseName}");
+        delegateParams.Add($"ref {sourceType.BaseName.Replace("::", ".")}");
         callArgs.Add("ref this"); // Default for own
 
         // Skip first parameter if it's 'this'
@@ -687,7 +688,7 @@ public class CSharpBindingsGenerator
 
             sb.Append($"{indent}public {returnType} {methodName}({paramsStr}) => ");
             // Base Class Field Name
-            string baseField = $"BaseClass_{sourceType.BaseName}";
+            string baseField = $"BaseClass_{sourceType.BaseName.Replace("::", "_")}";
             sb.AppendLine($"{baseField}.{methodName}({wrapperCallArgsStr});");
         }
         else
