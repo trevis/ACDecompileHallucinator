@@ -32,13 +32,49 @@ public class CSharpBindingsGenerator
     public string GenerateWithNamespace(List<TypeModel> types, string namespaceName = "ACBindings")
     {
         var sb = new System.Text.StringBuilder();
-        sb.AppendLine($"namespace {namespaceName};");
-        sb.AppendLine();
 
-        foreach (var type in types.Where(t => t.ParentType == null))
+        // Group types by their Namespace
+        var namespaceGroups = types
+            .GroupBy(t => t.Namespace ?? string.Empty)
+            .OrderBy(g => g.Key)
+            .ToList();
+
+        // Optimized case: Only one namespace group
+        if (namespaceGroups.Count == 1)
         {
-            GenerateType(type, sb, 0);
+            var group = namespaceGroups.First();
+            string subNs = group.Key.Replace("::", ".");
+            string finalNs = string.IsNullOrEmpty(subNs) ? namespaceName : $"{namespaceName}.{subNs}";
+
+            sb.AppendLine($"namespace {finalNs};");
             sb.AppendLine();
+
+            foreach (var type in group.Where(t => t.ParentType == null))
+            {
+                GenerateType(type, sb, 0); // File-scoped namespace, start at 0
+                sb.AppendLine();
+            }
+        }
+        else
+        {
+            // Multiple namespaces - use block scoped
+            foreach (var group in namespaceGroups)
+            {
+                string subNs = group.Key.Replace("::", ".");
+                string finalNs = string.IsNullOrEmpty(subNs) ? namespaceName : $"{namespaceName}.{subNs}";
+
+                sb.AppendLine($"namespace {finalNs}");
+                sb.AppendLine("{");
+
+                foreach (var type in group.Where(t => t.ParentType == null))
+                {
+                    GenerateType(type, sb, 1); // Block-scoped namespace, start at 1
+                    sb.AppendLine();
+                }
+
+                sb.AppendLine("}");
+                sb.AppendLine();
+            }
         }
 
         return sb.ToString();
