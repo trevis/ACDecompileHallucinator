@@ -753,7 +753,36 @@ public class CSharpBindingsGenerator
             GenerateInstanceMethod(methodName, returnType, parameters, offset, sourceType, currentType, sb, indent);
         }
     }
+    /// <summary>
+    /// Converts a function pointer parameter to C# delegate* syntax.
+    /// </summary>
+    private string MapFunctionPointerToCSharp(FunctionParamModel param)
+    {
+        var sig = param.NestedFunctionSignature!;
+        var callingConv = PrimitiveTypeMappings.MapCallingConvention(sig.CallingConvention);
 
+        // Build parameter types list
+        var paramTypes = sig.Parameters?
+            .OrderBy(p => p.Position)
+            .Select(p => p.IsFunctionPointerType && p.NestedFunctionSignature != null
+                ? MapFunctionPointerToCSharp(p)
+                : PrimitiveTypeMappings.MapType(p.ParameterType ?? "void"))
+            .ToList() ?? new List<string>();
+
+        // Map return type
+        var returnType = PrimitiveTypeMappings.MapType(sig.ReturnType ?? "void");
+
+        // Add return type as last type parameter
+        paramTypes.Add(returnType);
+
+        var typeParams = string.Join(", ", paramTypes);
+
+        if (string.IsNullOrEmpty(callingConv))
+        {
+            return $"delegate* unmanaged<{typeParams}>";
+        }
+        return $"delegate* unmanaged[{callingConv}]<{typeParams}>";
+    }
     private void GenerateStaticMethod(string methodName, string returnType, string callingConv,
         List<FunctionParamModel> parameters, string offset, System.Text.StringBuilder sb, string indent,
         TypeModel sourceType, TypeModel currentType)
