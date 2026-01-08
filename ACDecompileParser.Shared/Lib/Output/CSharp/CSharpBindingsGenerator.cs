@@ -36,6 +36,7 @@ public class CSharpBindingsGenerator
         // Group types by their Namespace
         var namespaceGroups = types
             .GroupBy(t => t.Namespace ?? string.Empty)
+            .Where(g => g.Any(t => t.ParentType == null))
             .OrderBy(g => g.Key)
             .ToList();
 
