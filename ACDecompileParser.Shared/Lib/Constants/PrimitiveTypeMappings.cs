@@ -123,6 +123,12 @@ public static class PrimitiveTypeMappings
         if (string.IsNullOrWhiteSpace(cppType))
             return "void";
 
+        // Handle PrimitiveInplaceArray specially to remove literal args
+        if (cppType.StartsWith("PrimitiveInplaceArray<", StringComparison.OrdinalIgnoreCase))
+        {
+            return StripLiteralTemplateArgs(cppType, false);
+        }
+
         // Normalize the type string first
         string normalized = ParsingUtilities.NormalizeTypeString(cppType);
 
@@ -167,6 +173,12 @@ public static class PrimitiveTypeMappings
     {
         if (string.IsNullOrWhiteSpace(cppType))
             return "void*";
+
+        // Handle PrimitiveInplaceArray specially
+        if (cppType.StartsWith("PrimitiveInplaceArray<", StringComparison.OrdinalIgnoreCase))
+        {
+            return StripLiteralTemplateArgs(cppType, true);
+        }
 
         string normalized = ParsingUtilities.NormalizeTypeString(cppType);
 
@@ -324,5 +336,39 @@ public static class PrimitiveTypeMappings
         }
 
         return false;
+    }
+
+    private static string StripLiteralTemplateArgs(string cppType, bool forStaticPointer)
+    {
+        int openBracket = cppType.IndexOf('<');
+        int closeBracket = cppType.LastIndexOf('>');
+        if (openBracket != -1 && closeBracket > openBracket)
+        {
+            string inner = cppType.Substring(openBracket + 1, closeBracket - openBracket - 1);
+            // The first argument is the type. We need to handle nested templates if they exist.
+            int firstComma = -1;
+            int depth = 0;
+            for (int i = 0; i < inner.Length; i++)
+            {
+                if (inner[i] == '<') depth++;
+                else if (inner[i] == '>') depth--;
+                else if (inner[i] == ',' && depth == 0)
+                {
+                    firstComma = i;
+                    break;
+                }
+            }
+
+            string firstArg = firstComma == -1 ? inner : inner.Substring(0, firstComma).Trim();
+
+            // Recursively map the first argument using base MapType (for the element type)
+            string mappedFirstArg = MapType(firstArg);
+
+            string result = $"PrimitiveInplaceArray<{mappedFirstArg}>";
+            if (forStaticPointer) result += "*";
+            return result;
+        }
+
+        return cppType;
     }
 }
