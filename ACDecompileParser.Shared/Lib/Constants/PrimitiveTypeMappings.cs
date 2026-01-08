@@ -363,7 +363,7 @@ public static class PrimitiveTypeMappings
             if (IsNumericLiteral(arg))
                 continue;
 
-            mappedArgs.Add(MapType(arg));
+            mappedArgs.Add(WrapPointerForGeneric(MapType(arg)));
         }
 
         if (mappedArgs.Count == 0)
