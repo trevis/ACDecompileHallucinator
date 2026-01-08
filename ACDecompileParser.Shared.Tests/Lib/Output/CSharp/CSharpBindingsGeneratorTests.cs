@@ -449,4 +449,61 @@ public class CSharpBindingsGeneratorTests
         // Verify members use generic parameters
         Assert.Contains("public T0* m_data;", output);
     }
+    [Fact]
+    public void Test_FunctionPointerParameter_InStaticMethod()
+    {
+        // Arrange - simulates UIFlow::RegisterFrameworkClass(unsigned int mode, UIMainFramework *(__cdecl *createMethod)())
+        var uiFlowType = new TypeModel
+        {
+            Id = 1,
+            BaseName = "UIFlow",
+            Type = TypeType.Struct,
+            FunctionBodies = new List<FunctionBodyModel>
+        {
+            new()
+            {
+                Id = 101,
+                FullyQualifiedName = "UIFlow::RegisterFrameworkClass",
+                FunctionSignature = new FunctionSignatureModel
+                {
+                    ReturnType = "void",
+                    CallingConvention = "Cdecl",
+                    Parameters = new List<FunctionParamModel>
+                    {
+                        new() { Name = "mode", ParameterType = "unsigned int", Position = 0 },
+                        new()
+                        {
+                            Name = "createMethod",
+                            ParameterType = "UIMainFramework*(__cdecl*)()",
+                            Position = 1,
+                            IsFunctionPointerType = true,
+                            NestedFunctionSignature = new FunctionSignatureModel
+                            {
+                                ReturnType = "UIMainFramework*",
+                                CallingConvention = "__cdecl",
+                                Parameters = new List<FunctionParamModel>()
+                            }
+                        }
+                    }
+                },
+                Offset = 0x00479C50
+            }
+        }
+        };
+
+        // Act
+        var output = _generator.Generate(uiFlowType);
+        _testOutput.WriteLine(output);
+
+        // Assert - should NOT contain the broken raw string
+        Assert.DoesNotContain("UIMainFramework*(__cdecl*", output);
+        Assert.DoesNotContain("__param2", output);
+
+        // Should contain proper delegate* syntax
+        Assert.Contains("delegate* unmanaged[Cdecl]<ACBindings.UIMainFramework*>", output);
+        Assert.Contains("createMethod", output);
+
+        // Full signature check
+        Assert.Contains("RegisterFrameworkClass(uint mode, delegate* unmanaged[Cdecl]<ACBindings.UIMainFramework*> createMethod)", output);
+    }
 }
