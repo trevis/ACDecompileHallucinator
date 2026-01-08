@@ -700,16 +700,16 @@ public class TypeRepository : ITypeRepository
         _context.FunctionBodies.Add(functionBody);
         return functionBody.Id;
     }
-
     public List<FunctionBodyModel> GetFunctionBodiesForType(int typeId)
     {
         return _context.FunctionBodies
             .Include(fb => fb.FunctionSignature)
-            .ThenInclude(fs => fs.Parameters)
+                .ThenInclude(fs => fs.Parameters)
+                    .ThenInclude(p => p.NestedFunctionSignature)
+                        .ThenInclude(nfs => nfs.Parameters)
             .Where(fb => fb.ParentId == typeId)
             .ToList();
     }
-
     public Dictionary<int, List<FunctionBodyModel>> GetFunctionBodiesForMultipleTypes(IEnumerable<int> typeIds)
     {
         var idSet = typeIds.ToHashSet();
