@@ -12,6 +12,11 @@ public static class ManualHelpers
     /// </summary>
     public static readonly Dictionary<string, string> Helpers = new()
     {
+        ["GlobalTypes"] = """
+            namespace ACBindings;
+
+            using HRESULT = int;
+            """,
         ["Ptr"] = """
             namespace ACBindings;
             

@@ -119,8 +119,9 @@ public static class PrimitiveTypeMappings
     /// Handles pointers, arrays, and complex types.
     /// </summary>
     /// <param name="cppType">The C++ type string (may include pointers, const, etc.)</param>
+    /// <param name="typeRef">Optional TypeReference to check if the type was successfully parsed</param>
     /// <returns>The equivalent C# type string</returns>
-    public static string MapType(string cppType)
+    public static string MapType(string cppType, TypeReference? typeRef = null)
     {
         if (string.IsNullOrWhiteSpace(cppType))
             return "void";
@@ -140,10 +141,26 @@ public static class PrimitiveTypeMappings
                 return "System.IntPtr";
             }
 
-            // Unknown pointers: Map the base type recursively
+            // Check if this is an unknown/unparsed pointer type
+            // Only apply this logic if the TypeReference has been resolved (attempted database lookup)
+            // If both ReferencedTypeId and ReferencedType are null, it means the reference was never resolved
+            // (e.g., during initial parsing), so we use default behavior
+            if (typeRef != null && typeRef.IsPointer &&
+                (typeRef.ReferencedTypeId.HasValue || typeRef.ReferencedType != null))
+            {
+                bool isUnknownType = typeRef.ReferencedTypeId == null;
+                bool isIgnoredType = typeRef.ReferencedType?.IsIgnored == true;
+
+                if (isUnknownType || isIgnoredType)
+                {
+                    return "System.IntPtr";
+                }
+            }
+
+            // Known/parsed pointers: Map the base type recursively
             // e.g. "MyType*" -> "ACBindings.MyType*"
             string baseTypePtr = normalized.Substring(0, normalized.Length - 1);
-            return MapType(baseTypePtr) + "*";
+            return MapType(baseTypePtr, typeRef: null) + "*";
         }
 
         // Check if it's a reference (treat as pointer)
@@ -189,12 +206,26 @@ public static class PrimitiveTypeMappings
     /// <summary>
     /// Maps a C++ type to C# for static variable pointers (preserves pointer type).
     /// </summary>
-    public static string MapTypeForStaticPointer(string cppType)
+    /// <param name="cppType">The C++ type string</param>
+    /// <param name="typeRef">Optional TypeReference to check if the type was successfully parsed</param>
+    public static string MapTypeForStaticPointer(string cppType, TypeReference? typeRef = null)
     {
         if (string.IsNullOrWhiteSpace(cppType))
             return "void*";
 
         string normalized = ParsingUtilities.NormalizeTypeString(cppType);
+
+        // Check if this is an unknown/unparsed pointer type first
+        if (typeRef != null && normalized.EndsWith("*"))
+        {
+            bool isUnknownType = typeRef.ReferencedTypeId == null;
+            bool isIgnoredType = typeRef.ReferencedType?.IsIgnored == true;
+
+            if (isUnknownType || isIgnoredType)
+            {
+                return "System.IntPtr";
+            }
+        }
 
         // Strip pointer suffix if present to map the underlying type
         string baseType = normalized.TrimEnd('*', ' ');
@@ -202,7 +233,7 @@ public static class PrimitiveTypeMappings
         // We do NOT return void* here; we want the actual typed pointer.
         // So we map the underlying type using MapType (which now handles generics/literals), then append *
 
-        string mappedBase = MapType(baseType);
+        string mappedBase = MapType(baseType, typeRef: null);
 
         // If MapType returns void* (because it thought baseType was a pointer?), we just return it as is?
         // But baseType shouldn't be a pointer if we stripped it.
@@ -412,6 +443,7 @@ public static class PrimitiveTypeMappings
         if (string.IsNullOrEmpty(name)) return name;
         return name.Replace("$", "_");
     }
+
     /// <summary>
     /// Wraps pointer types with Ptr&lt;&gt; for use in generic type arguments.
     /// C# does not allow pointer types as generic arguments directly.

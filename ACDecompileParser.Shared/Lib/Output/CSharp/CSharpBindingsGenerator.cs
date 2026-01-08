@@ -557,7 +557,7 @@ public class CSharpBindingsGenerator
 
         foreach (var p in parameters)
         {
-            string csType = PrimitiveTypeMappings.MapType(p.ParameterType ?? "void");
+            string csType = PrimitiveTypeMappings.MapType(p.ParameterType ?? "void", p.TypeReference);
             string pName = SanitizeParameterName(p.Name);
             csParams.Add($"{csType} {pName}");
             callArgs.Add(pName);
@@ -647,7 +647,7 @@ public class CSharpBindingsGenerator
     {
         string indent = new string(' ', indentLevel * 4);
 
-        string csType = PrimitiveTypeMappings.MapTypeForStaticPointer(sv.TypeString);
+        string csType = PrimitiveTypeMappings.MapTypeForStaticPointer(sv.TypeString, sv.TypeReference);
         string address = NormalizeAddress(sv.Address);
 
         sb.AppendLine($"{indent}public static {csType} {sv.Name} = ({csType}){address};");
@@ -674,7 +674,7 @@ public class CSharpBindingsGenerator
         }
         else
         {
-            csType = PrimitiveTypeMappings.MapType(member.TypeString ?? "void");
+            csType = PrimitiveTypeMappings.MapType(member.TypeString ?? "void", member.TypeReference);
 
             // Handle arrays
             if (member.TypeReference?.IsArray == true && member.TypeReference.ArraySize.HasValue)
@@ -690,7 +690,8 @@ public class CSharpBindingsGenerator
 
                 // For non-primitive arrays, use pointer
                 // Map the base type and append *
-                string mappedBaseType = PrimitiveTypeMappings.MapType(member.TypeString ?? "void");
+                string mappedBaseType =
+                    PrimitiveTypeMappings.MapType(member.TypeString ?? "void", member.TypeReference);
 
                 if (member.TypeReference != null && !string.IsNullOrEmpty(member.TypeReference.FullyQualifiedType))
                 {
@@ -727,7 +728,7 @@ public class CSharpBindingsGenerator
         }
 
         string offset = fb.Offset.HasValue ? $"0x{fb.Offset.Value:X8}" : "0x00000000";
-        string returnType = PrimitiveTypeMappings.MapType(sig.ReturnType ?? "void");
+        string returnType = PrimitiveTypeMappings.MapType(sig.ReturnType ?? "void", sig.ReturnTypeReference);
         string callingConv = PrimitiveTypeMappings.MapCallingConvention(sig.CallingConvention);
 
         // Extract method name (without namespace/class prefix)
@@ -753,6 +754,7 @@ public class CSharpBindingsGenerator
             GenerateInstanceMethod(methodName, returnType, parameters, offset, sourceType, currentType, sb, indent);
         }
     }
+
     /// <summary>
     /// Converts a function pointer parameter to C# delegate* syntax.
     /// </summary>
@@ -766,11 +768,11 @@ public class CSharpBindingsGenerator
             .OrderBy(p => p.Position)
             .Select(p => p.IsFunctionPointerType && p.NestedFunctionSignature != null
                 ? MapFunctionPointerToCSharp(p)
-                : PrimitiveTypeMappings.MapType(p.ParameterType ?? "void"))
+                : PrimitiveTypeMappings.MapType(p.ParameterType ?? "void", p.TypeReference))
             .ToList() ?? new List<string>();
 
         // Map return type
-        var returnType = PrimitiveTypeMappings.MapType(sig.ReturnType ?? "void");
+        var returnType = PrimitiveTypeMappings.MapType(sig.ReturnType ?? "void", sig.ReturnTypeReference);
 
         // Add return type as last type parameter
         paramTypes.Add(returnType);
@@ -781,8 +783,10 @@ public class CSharpBindingsGenerator
         {
             return $"delegate* unmanaged<{typeParams}>";
         }
+
         return $"delegate* unmanaged[{callingConv}]<{typeParams}>";
     }
+
     private void GenerateStaticMethod(string methodName, string returnType, string callingConv,
         List<FunctionParamModel> parameters, string offset, System.Text.StringBuilder sb, string indent,
         TypeModel sourceType, TypeModel currentType)
@@ -796,7 +800,7 @@ public class CSharpBindingsGenerator
         {
             string csType = p.IsFunctionPointerType && p.NestedFunctionSignature != null
                 ? MapFunctionPointerToCSharp(p)
-                : PrimitiveTypeMappings.MapType(p.ParameterType ?? "void");
+                : PrimitiveTypeMappings.MapType(p.ParameterType ?? "void", p.TypeReference);
             string paramName = SanitizeParameterName(p.Name);
 
             csParams.Add($"{csType} {paramName}");
@@ -920,7 +924,7 @@ public class CSharpBindingsGenerator
         {
             string csType = p.IsFunctionPointerType && p.NestedFunctionSignature != null
                 ? MapFunctionPointerToCSharp(p)
-                : PrimitiveTypeMappings.MapType(p.ParameterType ?? "void");
+                : PrimitiveTypeMappings.MapType(p.ParameterType ?? "void", p.TypeReference);
             string paramName = SanitizeParameterName(p.Name);
 
             csParams.Add($"{csType} {paramName}");
