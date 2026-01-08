@@ -933,13 +933,6 @@ public static class ParsingUtilities
 
         return (false, null);
     }
-
-    /// <summary>
-    /// Checks if a parameter string represents a function pointer type.
-    /// Function pointer parameters look like: HRESULT (__cdecl *)(const unsigned __int16 *)
-    /// </summary>
-    /// <param name="paramString">The parameter string to check</param>
-    /// <returns>True if this is a function pointer type parameter</returns>
     public static bool IsFunctionPointerParameter(string paramString)
     {
         if (string.IsNullOrWhiteSpace(paramString))
@@ -947,17 +940,17 @@ public static class ParsingUtilities
 
         var trimmed = paramString.Trim();
 
-        // Function pointer parameters have the pattern: ReturnType (CallingConvention *)(Params)
+        // Function pointer parameters have the pattern: ReturnType (CallingConvention *[name])(Params)
         // Key indicators:
-        // 1. Contains "(*)" or "(CallingConvention *)" pattern
+        // 1. Contains "(*)" or "(CallingConvention *)" pattern, optionally with a name
         // 2. Has at least two pairs of parentheses
         // 3. The second pair of parentheses contains the function parameters
 
         // Check for the pointer-in-parens pattern followed by a parameter list
-        var pattern = @"\(\s*(__thiscall|__stdcall|__cdecl|__fastcall)?\s*\*\s*\)\s*\(";
+        // The name is optional: (*), (__cdecl *), (__cdecl *createMethod), (*myFunc), etc.
+        var pattern = @"\(\s*(__thiscall|__stdcall|__cdecl|__fastcall)?\s*\*\s*\w*\s*\)\s*\(";
         return Regex.IsMatch(trimmed, pattern);
     }
-
     /// <summary>
     /// Extracts function pointer information from a parameter string.
     /// Handles parameters like: HRESULT (__cdecl *)(const unsigned __int16 *)
