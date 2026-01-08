@@ -338,4 +338,115 @@ public class CSharpBindingsGeneratorTests
         // Verify pulled up static method
         Assert.Contains("public static int StaticMethod() => ACBindings.Core.Base.StaticMethod();", output);
     }
+
+    [Fact]
+    public void Test_Generics_Generation()
+    {
+        // Define two instantiations of the same template
+        var types = new List<TypeModel>
+        {
+            new()
+            {
+                Id = 1,
+                BaseName = "SmartArray",
+                Namespace = "ACBindings",
+                Type = TypeType.Struct,
+                TemplateArguments = new List<TypeTemplateArgument>
+                {
+                    new() { Position = 0, TypeString = "int" }
+                },
+                StructMembers = new List<StructMemberModel>
+                {
+                    new() { Name = "m_data", TypeString = "int*", DeclarationOrder = 1 },
+                    new() { Name = "m_size", TypeString = "int", DeclarationOrder = 2 }
+                }
+            },
+            new()
+            {
+                Id = 2,
+                BaseName = "SmartArray",
+                Namespace = "ACBindings",
+                Type = TypeType.Struct,
+                TemplateArguments = new List<TypeTemplateArgument>
+                {
+                    new() { Position = 0, TypeString = "float" }
+                },
+                StructMembers = new List<StructMemberModel>
+                {
+                    // Note: float* vs int* in the other one
+                    new() { Name = "m_data", TypeString = "float*", DeclarationOrder = 1 },
+                    new() { Name = "m_size", TypeString = "int", DeclarationOrder = 2 }
+                }
+            }
+        };
+
+        var output = _generator.GenerateWithNamespace(types);
+        _testOutput.WriteLine(output);
+
+        // Verify we get a single generic definition
+        Assert.Contains("public unsafe struct SmartArray<T0>", output);
+
+        // Verify members use generic parameters
+        Assert.Contains("public T0* m_data;", output);
+        Assert.Contains("public int m_size;", output);
+
+        // Verify we DON'T get individual definitions
+        // Assert.DoesNotContain("public unsafe struct SmartArray ", output); 
+        // Logic: GenerateWithNamespace should prioritize generics and output only one struct
+    }
+
+    [Fact]
+    public void Test_Generics_Generation_With_Literals()
+    {
+        // Define two instantiations of the same template with a literal
+        // SmartArray<int, 5> and SmartArray<float, 5>
+        var types = new List<TypeModel>
+        {
+            new()
+            {
+                Id = 1,
+                BaseName = "SmartArrayLiteral",
+                Namespace = "ACBindings",
+                Type = TypeType.Struct,
+                TemplateArguments = new List<TypeTemplateArgument>
+                {
+                    new() { Position = 0, TypeString = "int" },
+                    new() { Position = 1, TypeString = "5" } // Literal
+                },
+                StructMembers = new List<StructMemberModel>
+                {
+                    new() { Name = "m_data", TypeString = "int*", DeclarationOrder = 1 },
+                    new() { Name = "m_size", TypeString = "int", DeclarationOrder = 2 }
+                }
+            },
+            new()
+            {
+                Id = 2,
+                BaseName = "SmartArrayLiteral",
+                Namespace = "ACBindings",
+                Type = TypeType.Struct,
+                TemplateArguments = new List<TypeTemplateArgument>
+                {
+                    new() { Position = 0, TypeString = "float" },
+                    new() { Position = 1, TypeString = "5" } // Literal
+                },
+                StructMembers = new List<StructMemberModel>
+                {
+                    new() { Name = "m_data", TypeString = "float*", DeclarationOrder = 1 },
+                    new() { Name = "m_size", TypeString = "int", DeclarationOrder = 2 }
+                }
+            }
+        };
+
+        var output = _generator.GenerateWithNamespace(types);
+        _testOutput.WriteLine(output);
+
+        // Verify we get a single generic definition with ONLY T0
+        // T1 (index 1) which matches "5" should be excluded
+        Assert.Contains("public unsafe struct SmartArrayLiteral<T0>", output);
+        Assert.DoesNotContain("public unsafe struct SmartArrayLiteral<T0, T1>", output);
+
+        // Verify members use generic parameters
+        Assert.Contains("public T0* m_data;", output);
+    }
 }

@@ -50,10 +50,27 @@ public class CSharpBindingsGenerator
             sb.AppendLine($"namespace {finalNs};");
             sb.AppendLine();
 
-            foreach (var type in group.Where(t => t.ParentType == null))
+            var baseNameGroups = group
+                .Where(t => t.ParentType == null)
+                .GroupBy(t => t.BaseName)
+                .ToList();
+
+            foreach (var baseGroup in baseNameGroups)
             {
-                GenerateType(type, sb, 0); // File-scoped namespace, start at 0
-                sb.AppendLine();
+                var instances = baseGroup.ToList();
+                if (instances.Count > 1 && instances.Any(t => t.IsGeneric))
+                {
+                    GenerateGenericStruct(instances, sb, 0); // File scoped, indent 0
+                    sb.AppendLine();
+                }
+                else
+                {
+                    foreach (var type in instances)
+                    {
+                        GenerateType(type, sb, 0); // File-scoped namespace, start at 0
+                        sb.AppendLine();
+                    }
+                }
             }
         }
         else
@@ -67,10 +84,33 @@ public class CSharpBindingsGenerator
                 sb.AppendLine($"namespace {finalNs}");
                 sb.AppendLine("{");
 
-                foreach (var type in group.Where(t => t.ParentType == null))
+                // Group by BaseName to detect template instantiations
+                var baseNameGroups = group
+                    .Where(t => t.ParentType == null)
+                    .GroupBy(t => t.BaseName)
+                    .ToList();
+
+                foreach (var baseGroup in baseNameGroups)
                 {
-                    GenerateType(type, sb, 1); // Block-scoped namespace, start at 1
-                    sb.AppendLine();
+                    // If we have multiple instantiations of a generic type, combine them
+                    // We need at least 2 to determine variance safely, or 1 if we decide to treat it as generic (future)
+                    // For now, require > 1 and IsGeneric
+                    var instances = baseGroup.ToList();
+
+                    if (instances.Count > 1 && instances.Any(t => t.IsGeneric))
+                    {
+                        GenerateGenericStruct(instances, sb, 1);
+                        sb.AppendLine();
+                    }
+                    else
+                    {
+                        // Standard generation
+                        foreach (var type in instances)
+                        {
+                            GenerateType(type, sb, 1);
+                            sb.AppendLine();
+                        }
+                    }
                 }
 
                 sb.AppendLine("}");
@@ -97,6 +137,7 @@ public class CSharpBindingsGenerator
 
     private void GenerateStruct(TypeModel type, System.Text.StringBuilder sb, int indentLevel)
     {
+        // ... (this method start)
         string indent = new string(' ', indentLevel * 4);
         string memberIndent = new string(' ', (indentLevel + 1) * 4);
 
@@ -215,6 +256,118 @@ public class CSharpBindingsGenerator
         }
 
         sb.AppendLine($"{indent}}}");
+    }
+
+    private void GenerateGenericStruct(List<TypeModel> instantiations, System.Text.StringBuilder sb, int indentLevel)
+    {
+        var type = instantiations.First(); // Representative
+        string indent = new string(' ', indentLevel * 4);
+        string memberIndent = new string(' ', (indentLevel + 1) * 4);
+
+        string safeBaseName = PrimitiveTypeMappings.CleanTypeName(type.BaseName);
+
+        // Define generic parameters, excluding literals
+        var templateArgs = type.TemplateArguments?.OrderBy(ta => ta.Position).ToList() ??
+                           new List<TypeTemplateArgument>();
+        var genericParams = new List<(string Name, int Position)>();
+        int tIndex = 0;
+        foreach (var arg in templateArgs)
+        {
+            if (PrimitiveTypeMappings.IsNumericLiteral(arg.TypeString))
+                continue;
+
+            genericParams.Add(($"T{tIndex}", arg.Position));
+            tIndex++;
+        }
+
+        string genericPart = genericParams.Any() ? $"<{string.Join(", ", genericParams.Select(p => p.Name))}>" : "";
+        string structDecl = $"public unsafe struct {safeBaseName}{genericPart}";
+
+        // Check for destructor in hierarchy (using representative)
+        bool hasDestructor = HasDestructorInHierarchy(type);
+        if (hasDestructor) structDecl += " : System.IDisposable";
+
+        sb.AppendLine($"{indent}{structDecl}");
+        sb.AppendLine($"{indent}{{");
+
+        // Variance Analysis for Members
+        var memberMap = new Dictionary<int, List<string>>();
+
+        foreach (var inst in instantiations)
+        {
+            var instMembers = inst.StructMembers ?? _repository?.GetStructMembersWithRelatedTypes(inst.Id).ToList() ??
+                new List<StructMemberModel>();
+            foreach (var m in instMembers)
+            {
+                if (!memberMap.ContainsKey(m.DeclarationOrder)) memberMap[m.DeclarationOrder] = new List<string>();
+                memberMap[m.DeclarationOrder].Add(m.TypeString ?? "void");
+            }
+        }
+
+        var repMembers = type.StructMembers ?? _repository?.GetStructMembersWithRelatedTypes(type.Id).ToList() ??
+            new List<StructMemberModel>();
+
+        if (repMembers.Any())
+        {
+            sb.AppendLine($"{memberIndent}// Members");
+            foreach (var member in repMembers.OrderBy(m => m.DeclarationOrder))
+            {
+                // Get types for this slot
+                if (!memberMap.TryGetValue(member.DeclarationOrder, out var typeVariations) ||
+                    typeVariations.Count != instantiations.Count)
+                {
+                    sb.AppendLine($"{memberIndent}// Error: Member alignment mismatch for {member.Name}");
+                    continue;
+                }
+
+                string finalType = ResolveGenericType(typeVariations, instantiations, genericParams);
+
+                string comment = "";
+                if (member.BitFieldWidth.HasValue) comment = $" // : {member.BitFieldWidth.Value}";
+
+                sb.AppendLine($"{memberIndent}public {finalType} {member.Name};{comment}");
+            }
+        }
+
+        // Methods?
+        sb.AppendLine();
+        sb.AppendLine($"{memberIndent}// Methods (Generic)");
+        // TODO: Genericize methods. For now we skip to avoid broken bindings.
+
+        sb.AppendLine($"{indent}}}");
+    }
+
+    private string ResolveGenericType(List<string> variations, List<TypeModel> instantiations,
+        List<(string Name, int Position)> genericParams)
+    {
+        // Check if all same
+        if (variations.Distinct().Count() == 1)
+        {
+            return PrimitiveTypeMappings.MapType(variations[0]);
+        }
+
+        // Check matches against template args
+        foreach (var (name, position) in genericParams)
+        {
+            bool match = true;
+            bool ptrMatch = true;
+
+            for (int i = 0; i < instantiations.Count; i++)
+            {
+                // Get the concrete type of T{k} for this instance
+                string concreteT = instantiations[i].TemplateArguments.FirstOrDefault(t => t.Position == position)
+                    ?.TypeString ?? "";
+
+                if (variations[i] != concreteT) match = false;
+                if (variations[i] != concreteT + "*") ptrMatch = false; // Simple pointer check
+            }
+
+            if (match) return name;
+            if (ptrMatch) return name + "*";
+        }
+
+        // Fallback for unmapped varying types
+        return "void*";
     }
 
     private Dictionary<string, TypeModel> GetDirectBaseTypes(TypeModel type)

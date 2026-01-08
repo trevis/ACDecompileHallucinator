@@ -93,7 +93,8 @@ public static class PrimitiveTypeMappings
         { "uintptr_t", "nuint" },
         { "DWORD_PTR", "nuint" },
 
-        { "IDClass<_tagDataID,32,0>", "uint" }
+        { "IDClass<_tagDataID,32,0>", "uint" },
+        { "void*", "System.IntPtr" }
     };
 
     /// <summary>
@@ -382,7 +383,7 @@ public static class PrimitiveTypeMappings
         return list;
     }
 
-    private static bool IsNumericLiteral(string arg)
+    public static bool IsNumericLiteral(string arg)
     {
         if (string.IsNullOrEmpty(arg)) return false;
         // Check for digit start or negative sign followed by digit
