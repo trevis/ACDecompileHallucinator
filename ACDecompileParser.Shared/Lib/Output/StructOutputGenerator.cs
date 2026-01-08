@@ -1,13 +1,18 @@
 using ACDecompileParser.Shared.Lib.Models;
 using ACDecompileParser.Shared.Lib.Storage;
 using ACDecompileParser.Shared.Lib.Output.Models;
+using ACDecompileParser.Shared.Lib.Services;
 
 namespace ACDecompileParser.Shared.Lib.Output;
 
 public class StructOutputGenerator : TypeOutputGeneratorBase
 {
-    public StructOutputGenerator(ITypeRepository? repository = null) : base(repository)
+    private readonly MemberTokenGenerator _memberGenerator;
+
+    public StructOutputGenerator(ITypeRepository? repository = null,
+        ITypeTokenizationService? tokenizationService = null) : base(repository, tokenizationService)
     {
+        _memberGenerator = new MemberTokenGenerator(TokenizationService);
     }
 
     public override IEnumerable<CodeToken> Generate(TypeModel type)
@@ -155,7 +160,8 @@ public class StructOutputGenerator : TypeOutputGeneratorBase
                 {
                     matchedBodyIds.Add(exactMatch.Id);
                     string sigStr =
-                        GetNormalizedSignatureString(exactMatch.FunctionSignature, exactMatch.FullyQualifiedName);
+                        _memberGenerator.GetNormalizedSignatureString(exactMatch.FunctionSignature,
+                            exactMatch.FullyQualifiedName);
                     yield return new CodeToken($"// Matched: {sigStr}", TokenType.Comment);
                     yield return new CodeToken(Environment.NewLine, TokenType.Whitespace);
                     yield return new CodeToken("    ", TokenType.Whitespace);
@@ -168,7 +174,7 @@ public class StructOutputGenerator : TypeOutputGeneratorBase
                 }
             }
 
-            foreach (var token in ReconstructMemberTokens(member, type.Namespace, exactMatch))
+            foreach (var token in _memberGenerator.GenerateMemberTokens(member, type.Namespace, exactMatch))
             {
                 yield return token;
             }
@@ -242,233 +248,12 @@ public class StructOutputGenerator : TypeOutputGeneratorBase
 
                 foreach (var body in unmatchedBodies)
                 {
-                    string sigStr = GetNormalizedSignatureString(body.FunctionSignature, body.FullyQualifiedName);
+                    string sigStr =
+                        _memberGenerator.GetNormalizedSignatureString(body.FunctionSignature, body.FullyQualifiedName);
                     yield return new CodeToken($"// {sigStr}", TokenType.Comment);
                     yield return new CodeToken(Environment.NewLine, TokenType.Whitespace);
                 }
             }
         }
-    }
-
-    private IEnumerable<CodeToken> ReconstructMemberTokens(StructMemberModel member, string? contextNamespace = null,
-        FunctionBodyModel? matchedFunction = null)
-    {
-        // Add alignment if present
-        if (member.Alignment.HasValue)
-        {
-            yield return new CodeToken("__declspec", TokenType.Keyword);
-            yield return new CodeToken("(", TokenType.Punctuation);
-            yield return new CodeToken("align", TokenType.Keyword);
-            yield return new CodeToken("(", TokenType.Punctuation);
-            yield return new CodeToken(member.Alignment.Value.ToString(), TokenType.NumberLiteral);
-            yield return new CodeToken(")", TokenType.Punctuation);
-            yield return new CodeToken(")", TokenType.Punctuation);
-            yield return new CodeToken(" ", TokenType.Whitespace);
-        }
-
-        // Handle function pointers / vtable delegates
-        if (matchedFunction != null && member.IsFunctionPointer && matchedFunction.FunctionSignature != null)
-        {
-            // Use delegate* unmanaged approach
-            yield return new CodeToken("public ", TokenType.Keyword); // Explicitly public for vtables
-            yield return
-                new CodeToken("static ",
-                    TokenType.Keyword); // VTable entries are just pointers, making them static delegates isn't quite right for C++ vtables, but for C# interop bindings, we often emit them as fields.
-            // Wait, the user request shows: public static delegate* unmanaged...
-            // So they want static delegates?
-            // "public static delegate* unmanaged[Thiscall]<Render*, UInt32, void*> _DestructorInternal;"
-            // Yes, user request explicitly shows static delegate* unmanaged.
-
-            yield return new CodeToken("delegate", TokenType.Keyword);
-            yield return new CodeToken("* ", TokenType.Punctuation);
-            yield return new CodeToken("unmanaged", TokenType.Keyword);
-
-            var sig = matchedFunction.FunctionSignature;
-            string callingConvention =
-                sig.CallingConvention?.Replace("__", "") ??
-                "Thiscall"; // Default to Thiscall if missing, strip underscores
-            // Capitalize first letter? The user example has "Thiscall".
-            if (callingConvention.Equals("thiscall", StringComparison.OrdinalIgnoreCase))
-                callingConvention = "Thiscall";
-            else if (callingConvention.Equals("cdecl", StringComparison.OrdinalIgnoreCase)) callingConvention = "Cdecl";
-            else if (callingConvention.Equals("stdcall", StringComparison.OrdinalIgnoreCase))
-                callingConvention = "Stdcall";
-            else if (callingConvention.Equals("fastcall", StringComparison.OrdinalIgnoreCase))
-                callingConvention = "Fastcall";
-
-            yield return
-                new CodeToken($"[{callingConvention}]",
-                    TokenType.TypeName); // Attribute-like syntax for unmanaged delegates
-            yield return new CodeToken("<", TokenType.Punctuation);
-
-            // Reconstruct parameters
-            // Check if 'this' pointer is needed and missing
-            // For Thiscall, the first argument should be the 'this' pointer.
-            // Sometimes the parsed signature already has it, sometimes not.
-            // If callingConvention is Thiscall, we expect the first arg to be the parent type pointer.
-
-            var parameters = sig.Parameters?.OrderBy(p => p.Position).ToList() ?? new List<FunctionParamModel>();
-
-            foreach (var param in parameters)
-            {
-                foreach (var token in TokenizeTypeString(param.ParameterType ?? "void*", null, contextNamespace))
-                {
-                    yield return token;
-                }
-
-                yield return new CodeToken(", ", TokenType.Punctuation);
-            }
-
-            // Return type is the last type argument
-            string returnType = sig.ReturnType ?? "void";
-            foreach (var token in TokenizeTypeString(returnType, null, contextNamespace))
-            {
-                yield return token;
-            }
-
-            yield return new CodeToken(">", TokenType.Punctuation);
-            yield return new CodeToken(" ", TokenType.Whitespace);
-
-            // Name
-            string name = member.Name;
-            if (name.StartsWith("~") || name.Contains("_dtor_"))
-            {
-                name = "_DestructorInternal";
-            }
-
-            yield return new CodeToken(name, TokenType.Identifier);
-
-            yield return new CodeToken(";", TokenType.Punctuation);
-            yield break;
-        }
-
-        // Handle generic function pointers (no match found)
-        if (member.IsFunctionPointer && member.FunctionSignature != null)
-        {
-            string returnType = member.FunctionSignature.ReturnType ?? "void";
-            string callingConvention = !string.IsNullOrEmpty(member.FunctionSignature.CallingConvention)
-                ? member.FunctionSignature.CallingConvention + " "
-                : "";
-
-            foreach (var token in TokenizeTypeString(returnType, null, contextNamespace))
-            {
-                yield return token;
-            }
-
-            yield return new CodeToken(" ", TokenType.Whitespace);
-            yield return new CodeToken("(", TokenType.Punctuation);
-            if (!string.IsNullOrEmpty(callingConvention))
-            {
-                yield return new CodeToken(callingConvention.Trim(), TokenType.Keyword);
-                yield return new CodeToken(" ", TokenType.Whitespace);
-            }
-
-            yield return new CodeToken("*", TokenType.Punctuation);
-            yield return new CodeToken(member.Name, TokenType.Identifier);
-            yield return new CodeToken(")", TokenType.Punctuation);
-            yield return new CodeToken("(", TokenType.Punctuation);
-
-            if (member.FunctionSignature.Parameters != null)
-            {
-                var paramList = member.FunctionSignature.Parameters.ToList();
-                for (int i = 0; i < paramList.Count; i++)
-                {
-                    var param = paramList[i];
-                    foreach (var token in TokenizeTypeString(param.ParameterType ?? string.Empty, null,
-                                 contextNamespace))
-                    {
-                        yield return token;
-                    }
-
-                    yield return new CodeToken(" ", TokenType.Whitespace);
-                    yield return new CodeToken(param.Name ?? string.Empty, TokenType.Identifier);
-
-                    if (i < paramList.Count - 1)
-                    {
-                        yield return new CodeToken(", ", TokenType.Punctuation);
-                    }
-                }
-            }
-
-            yield return new CodeToken(")", TokenType.Punctuation);
-            yield return new CodeToken(";", TokenType.Punctuation);
-            yield break;
-        }
-
-        // Add type string
-        foreach (var token in TokenizeTypeString(member.TypeString ?? string.Empty,
-                     member.TypeReference?.ReferencedTypeId, contextNamespace))
-        {
-            yield return token;
-        }
-
-        yield return new CodeToken(" ", TokenType.Whitespace);
-
-        // Add member name
-        yield return new CodeToken(member.Name ?? string.Empty, TokenType.Identifier);
-
-        // Handle array declarations
-        if (member.TypeReference?.IsArray == true)
-        {
-            yield return new CodeToken("[", TokenType.Punctuation);
-            if (member.TypeReference.ArraySize.HasValue)
-            {
-                yield return new CodeToken(member.TypeReference.ArraySize.Value.ToString(), TokenType.NumberLiteral);
-            }
-
-            yield return new CodeToken("]", TokenType.Punctuation);
-        }
-
-        // Handle bit fields
-        if (member.BitFieldWidth.HasValue)
-        {
-            yield return new CodeToken(" : ", TokenType.Punctuation);
-            yield return new CodeToken(member.BitFieldWidth.Value.ToString(), TokenType.NumberLiteral);
-        }
-
-        // Close with semicolon
-        yield return new CodeToken(";", TokenType.Punctuation);
-    }
-
-    private string GetNormalizedSignatureString(FunctionSignatureModel? sig, string fallbackName)
-    {
-        if (sig == null)
-            return fallbackName;
-
-        string returnType = sig.ReturnType ?? "void";
-        string callingConv = !string.IsNullOrEmpty(sig.CallingConvention) ? sig.CallingConvention + " " : "";
-        string name = sig.Name; // Or extract from fallbackName if needed, but sig.Name should be good
-
-        // If Name is missing in sig, try to use fallbackName (handle :: if needed)
-        if (string.IsNullOrEmpty(name))
-            name = fallbackName;
-
-        var sb = new System.Text.StringBuilder();
-        sb.Append(returnType);
-        sb.Append(" ");
-        sb.Append(callingConv);
-        sb.Append(name);
-        sb.Append("(");
-
-        if (sig.Parameters != null && sig.Parameters.Any())
-        {
-            var pList = sig.Parameters.OrderBy(p => p.Position).ToList();
-            for (int i = 0; i < pList.Count; i++)
-            {
-                var p = pList[i];
-                sb.Append(p.ParameterType);
-                if (!string.IsNullOrEmpty(p.Name))
-                {
-                    sb.Append(" ");
-                    sb.Append(p.Name);
-                }
-
-                if (i < pList.Count - 1)
-                    sb.Append(", ");
-            }
-        }
-
-        sb.Append(")");
-        return sb.ToString();
     }
 }

@@ -72,7 +72,7 @@ public static class PrimitiveTypeMappings
         { "_BYTE", "byte" },
 
 // Boolean (use Byte for struct layout compatibility)
-        { "bool", "Byte" },
+        { "bool", "byte" },
 
 // Floating point
         { "float", "float" },

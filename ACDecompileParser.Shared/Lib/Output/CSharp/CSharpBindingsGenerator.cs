@@ -761,7 +761,7 @@ public class CSharpBindingsGenerator
         return csType switch
         {
             "byte" or "sbyte" or "short" or "ushort" or "int" or "uint" or
-                "long" or "ulong" or "float" or "double" or "char" or "Byte" => true,
+                "long" or "ulong" or "float" or "double" or "char" => true,
             _ => false
         };
     }

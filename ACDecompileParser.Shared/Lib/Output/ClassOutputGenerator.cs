@@ -1,6 +1,7 @@
 using ACDecompileParser.Shared.Lib.Models;
 using ACDecompileParser.Shared.Lib.Storage;
 using ACDecompileParser.Shared.Lib.Output.Models;
+using ACDecompileParser.Shared.Lib.Services;
 
 namespace ACDecompileParser.Shared.Lib.Output;
 
@@ -11,12 +12,14 @@ namespace ACDecompileParser.Shared.Lib.Output;
 public class ClassOutputGenerator : TypeOutputGeneratorBase
 {
     private readonly StructOutputGenerator _structGenerator;
-    private readonly EnumOutputGenerator _enumGenerator;
 
-    public ClassOutputGenerator(ITypeRepository? repository = null) : base(repository)
+    private readonly MemberTokenGenerator _memberGenerator;
+
+    public ClassOutputGenerator(ITypeRepository? repository = null,
+        ITypeTokenizationService? tokenizationService = null) : base(repository, tokenizationService)
     {
-        _structGenerator = new StructOutputGenerator(repository);
-        _enumGenerator = new EnumOutputGenerator(repository);
+        _structGenerator = new StructOutputGenerator(repository, tokenizationService);
+        _memberGenerator = new MemberTokenGenerator(TokenizationService);
     }
 
     public override IEnumerable<CodeToken> Generate(TypeModel type)
@@ -295,7 +298,8 @@ public class ClassOutputGenerator : TypeOutputGeneratorBase
                 }
 
                 // Output the signature
-                foreach (var token in GenerateTokenizedSignature(body.FunctionSignature, body.FullyQualifiedName,
+                foreach (var token in _memberGenerator.GenerateSignatureTokens(body.FunctionSignature,
+                             body.FullyQualifiedName,
                              type.Namespace))
                 {
                     yield return token;
@@ -414,60 +418,9 @@ public class ClassOutputGenerator : TypeOutputGeneratorBase
     {
         yield return new CodeToken("    ", TokenType.Whitespace);
 
-        // Add alignment if present
-        if (member.Alignment.HasValue)
+        foreach (var token in _memberGenerator.GenerateMemberTokens(member, contextNamespace))
         {
-            yield return new CodeToken("__declspec", TokenType.Keyword);
-            yield return new CodeToken("(", TokenType.Punctuation);
-            yield return new CodeToken("align", TokenType.Keyword);
-            yield return new CodeToken("(", TokenType.Punctuation);
-            yield return new CodeToken(member.Alignment.Value.ToString(), TokenType.NumberLiteral);
-            yield return new CodeToken(")", TokenType.Punctuation);
-            yield return new CodeToken(")", TokenType.Punctuation);
-            yield return new CodeToken(" ", TokenType.Whitespace);
-        }
-
-        // Handle function pointers
-        if (member.IsFunctionPointer && member.FunctionSignature != null)
-        {
-            foreach (var token in GenerateFunctionPointerMember(member, contextNamespace))
-            {
-                yield return token;
-            }
-        }
-        else
-        {
-            // Regular member
-            foreach (var token in TokenizeTypeString(member.TypeString ?? string.Empty,
-                         member.TypeReference?.ReferencedTypeId, contextNamespace))
-            {
-                yield return token;
-            }
-
-            yield return new CodeToken(" ", TokenType.Whitespace);
-            yield return new CodeToken(member.Name ?? string.Empty, TokenType.Identifier);
-
-            // Handle array declarations
-            if (member.TypeReference?.IsArray == true)
-            {
-                yield return new CodeToken("[", TokenType.Punctuation);
-                if (member.TypeReference.ArraySize.HasValue)
-                {
-                    yield return new CodeToken(member.TypeReference.ArraySize.Value.ToString(),
-                        TokenType.NumberLiteral);
-                }
-
-                yield return new CodeToken("]", TokenType.Punctuation);
-            }
-
-            // Handle bit fields
-            if (member.BitFieldWidth.HasValue)
-            {
-                yield return new CodeToken(" : ", TokenType.Punctuation);
-                yield return new CodeToken(member.BitFieldWidth.Value.ToString(), TokenType.NumberLiteral);
-            }
-
-            yield return new CodeToken(";", TokenType.Punctuation);
+            yield return token;
         }
 
         // Add offset comment
@@ -477,60 +430,6 @@ public class ClassOutputGenerator : TypeOutputGeneratorBase
         }
 
         yield return new CodeToken(Environment.NewLine, TokenType.Whitespace);
-    }
-
-    private IEnumerable<CodeToken> GenerateFunctionPointerMember(StructMemberModel member, string? contextNamespace)
-    {
-        var sig = member.FunctionSignature!;
-        string returnType = sig.ReturnType ?? "void";
-        string callingConvention = !string.IsNullOrEmpty(sig.CallingConvention)
-            ? sig.CallingConvention + " "
-            : "";
-
-        foreach (var token in TokenizeTypeString(returnType, null, contextNamespace))
-        {
-            yield return token;
-        }
-
-        yield return new CodeToken(" ", TokenType.Whitespace);
-        yield return new CodeToken("(", TokenType.Punctuation);
-        if (!string.IsNullOrEmpty(callingConvention))
-        {
-            yield return new CodeToken(callingConvention.Trim(), TokenType.Keyword);
-            yield return new CodeToken(" ", TokenType.Whitespace);
-        }
-
-        yield return new CodeToken("*", TokenType.Punctuation);
-        yield return new CodeToken(member.Name ?? string.Empty, TokenType.Identifier);
-        yield return new CodeToken(")", TokenType.Punctuation);
-        yield return new CodeToken("(", TokenType.Punctuation);
-
-        if (sig.Parameters != null)
-        {
-            var paramList = sig.Parameters.ToList();
-            for (int i = 0; i < paramList.Count; i++)
-            {
-                var param = paramList[i];
-                foreach (var token in TokenizeTypeString(param.ParameterType ?? string.Empty, null, contextNamespace))
-                {
-                    yield return token;
-                }
-
-                if (!string.IsNullOrEmpty(param.Name))
-                {
-                    yield return new CodeToken(" ", TokenType.Whitespace);
-                    yield return new CodeToken(param.Name, TokenType.Identifier);
-                }
-
-                if (i < paramList.Count - 1)
-                {
-                    yield return new CodeToken(", ", TokenType.Punctuation);
-                }
-            }
-        }
-
-        yield return new CodeToken(")", TokenType.Punctuation);
-        yield return new CodeToken(";", TokenType.Punctuation);
     }
 
     private static string GetStructKeyword(TypeModel type)
@@ -571,69 +470,5 @@ public class ClassOutputGenerator : TypeOutputGeneratorBase
         }
 
         return vtableMethodOffsets;
-    }
-
-    /// <summary>
-    /// Generates tokenized method signature for display.
-    /// </summary>
-    private IEnumerable<CodeToken> GenerateTokenizedSignature(FunctionSignatureModel? sig, string fallbackName,
-        string? contextNamespace)
-    {
-        if (sig == null)
-        {
-            yield return new CodeToken(fallbackName, TokenType.Identifier);
-            yield break;
-        }
-
-        string returnType = sig.ReturnType ?? "void";
-
-        foreach (var token in TokenizeTypeString(returnType, sig.ReturnTypeReference?.ReferencedTypeId,
-                     contextNamespace))
-        {
-            yield return token;
-        }
-
-        yield return new CodeToken(" ", TokenType.Whitespace);
-
-        if (!string.IsNullOrEmpty(sig.CallingConvention))
-        {
-            yield return new CodeToken(sig.CallingConvention, TokenType.Keyword);
-            yield return new CodeToken(" ", TokenType.Whitespace);
-        }
-
-        string name = sig.Name;
-        if (string.IsNullOrEmpty(name))
-            name = fallbackName;
-
-        yield return new CodeToken(name, TokenType.Identifier);
-
-        yield return new CodeToken("(", TokenType.Punctuation);
-
-        if (sig.Parameters != null && sig.Parameters.Any())
-        {
-            var pList = sig.Parameters.OrderBy(p => p.Position).ToList();
-            for (int i = 0; i < pList.Count; i++)
-            {
-                var p = pList[i];
-                foreach (var token in TokenizeTypeString(p.ParameterType ?? string.Empty,
-                             p.TypeReference?.ReferencedTypeId, contextNamespace))
-                {
-                    yield return token;
-                }
-
-                if (!string.IsNullOrEmpty(p.Name))
-                {
-                    yield return new CodeToken(" ", TokenType.Whitespace);
-                    yield return new CodeToken(p.Name, TokenType.Identifier);
-                }
-
-                if (i < pList.Count - 1)
-                {
-                    yield return new CodeToken(", ", TokenType.Punctuation);
-                }
-            }
-        }
-
-        yield return new CodeToken(")", TokenType.Punctuation);
     }
 }

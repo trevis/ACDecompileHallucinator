@@ -1,12 +1,14 @@
 using ACDecompileParser.Shared.Lib.Models;
 using ACDecompileParser.Shared.Lib.Storage;
 using ACDecompileParser.Shared.Lib.Output.Models;
+using ACDecompileParser.Shared.Lib.Services;
 
 namespace ACDecompileParser.Shared.Lib.Output;
 
 public class EnumOutputGenerator : TypeOutputGeneratorBase
 {
-    public EnumOutputGenerator(ITypeRepository? repository = null) : base(repository)
+    public EnumOutputGenerator(ITypeRepository? repository = null, ITypeTokenizationService? tokenizationService = null)
+        : base(repository, tokenizationService)
     {
     }
 
