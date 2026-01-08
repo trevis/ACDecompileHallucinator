@@ -918,7 +918,9 @@ public class CSharpBindingsGenerator
 
         foreach (var p in paramsToProcess)
         {
-            string csType = PrimitiveTypeMappings.MapType(p.ParameterType ?? "void");
+            string csType = p.IsFunctionPointerType && p.NestedFunctionSignature != null
+                ? MapFunctionPointerToCSharp(p)
+                : PrimitiveTypeMappings.MapType(p.ParameterType ?? "void");
             string paramName = SanitizeParameterName(p.Name);
 
             csParams.Add($"{csType} {paramName}");
