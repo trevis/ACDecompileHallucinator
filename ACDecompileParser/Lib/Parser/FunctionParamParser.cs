@@ -216,8 +216,9 @@ public class FunctionParamParser
                     parameters.Add(new FunctionParamModel
                     {
                         ParameterType = param,
-                        Name = $"__nested_funcptr{i + 1}",
+                        Name = nestedFuncSig.Value.Signature.Name,
                         Position = i,
+                        IsFunctionPointerType = true,
                         NestedFunctionSignature = nestedFuncSig.Value.Signature,
                         Source = source ?? param.Trim(),
                         LineNumber = lineNumber,
