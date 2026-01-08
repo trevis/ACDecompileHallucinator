@@ -412,4 +412,21 @@ public static class PrimitiveTypeMappings
         if (string.IsNullOrEmpty(name)) return name;
         return name.Replace("$", "_");
     }
+    /// <summary>
+    /// Wraps pointer types with Ptr&lt;&gt; for use in generic type arguments.
+    /// C# does not allow pointer types as generic arguments directly.
+    /// </summary>
+    public static string WrapPointerForGeneric(string mappedType)
+    {
+        if (string.IsNullOrEmpty(mappedType))
+            return mappedType;
+
+        if (mappedType.EndsWith("*"))
+        {
+            string baseType = mappedType.TrimEnd('*');
+            return $"Ptr<{baseType}>";
+        }
+
+        return mappedType;
+    }
 }
