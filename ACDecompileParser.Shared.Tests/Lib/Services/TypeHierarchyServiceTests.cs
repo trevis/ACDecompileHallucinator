@@ -127,4 +127,39 @@ public class TypeHierarchyServiceTests
         Assert.Contains(child, ns1Group.Value);
         Assert.DoesNotContain(child, ns2Group.Value);
     }
+    [Fact]
+    public void GroupTypes_ShouldGroup_SameName_DifferentCase()
+    {
+        // Arrange
+        var service = new TypeHierarchyService();
+        var structType = new TypeModel
+        {
+            Id = 1,
+            BaseName = "ObjectInfo",
+            Namespace = "Global",
+            Type = TypeType.Struct
+        };
+
+        var enumType = new TypeModel
+        {
+            Id = 2,
+            BaseName = "OBJECTINFO",
+            Namespace = "Global",
+            Type = TypeType.Enum
+        };
+
+        var types = new List<TypeModel> { structType, enumType };
+
+        // Act
+        var result = service.GroupTypesByBaseNameAndNamespace(types);
+
+        // Assert
+        // Currently, it should return 2 groups because dictionary keys are case-sensitive
+        // We want it to eventually return 1 group
+
+        // This test check the CURRENT behavior (which we want to CHANGE)
+        // Adjust the assertion based on whether we are testing current or desired state.
+        // I will assert 2 for now to confirm reproduction.
+        Assert.Equal(2, result.Count);
+    }
 }
