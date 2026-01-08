@@ -9,7 +9,7 @@ public class PrimitiveTypeMappingTests
     [InlineData("PrimitiveInplaceArray<ArchiveVersionRow::VersionEntry,8,1>",
         "ACBindings.PrimitiveInplaceArray<ACBindings.ArchiveVersionRow.VersionEntry>")]
     [InlineData("PrimitiveInplaceArray<int,10,4>", "ACBindings.PrimitiveInplaceArray<int>")]
-    [InlineData("PrimitiveInplaceArray<SomeType*,20,8>", "ACBindings.PrimitiveInplaceArray<void*>")]
+    [InlineData("PrimitiveInplaceArray<SomeType*,20,8>", "ACBindings.PrimitiveInplaceArray<ACBindings.SomeType*>")]
     [InlineData("int", "int")]
     [InlineData("ArchiveVersionRow::VersionEntry", "ACBindings.ArchiveVersionRow.VersionEntry")]
     [InlineData("Vector3", "ACBindings.Vector3")]
@@ -17,6 +17,12 @@ public class PrimitiveTypeMappingTests
     [InlineData("HashTable<unsigned long,HeritageGroup_CG,0>",
         "ACBindings.HashTable<uint,ACBindings.HeritageGroup_CG>")]
     [InlineData("Foo<Bar<int, 5>, 10>", "ACBindings.Foo<ACBindings.Bar<int>>")]
+    [InlineData("void*", "System.IntPtr")]
+    [InlineData("SmartArray<void*, 1>", "ACBindings.SmartArray<System.IntPtr>")]
+    [InlineData("PrimitiveInplaceArray<void*, 8, 1>", "ACBindings.PrimitiveInplaceArray<System.IntPtr>")]
+    [InlineData("HashTable<void*, int, 0>", "ACBindings.HashTable<System.IntPtr,int>")]
+    [InlineData("DArray<UnknownType*>", "ACBindings.DArray<ACBindings.UnknownType*>")]
+    [InlineData("Type$With$Dollars", "ACBindings.Type_With_Dollars")]
     public void MapType_PrimitiveInplaceArray_RemovesLiteralArgs(string input, string expected)
     {
         var result = PrimitiveTypeMappings.MapType(input);

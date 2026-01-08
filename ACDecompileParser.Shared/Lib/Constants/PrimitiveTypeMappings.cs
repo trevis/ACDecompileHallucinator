@@ -94,6 +94,7 @@ public static class PrimitiveTypeMappings
         { "DWORD_PTR", "nuint" },
 
         { "IDClass<_tagDataID,32,0>", "uint" },
+        { "IDClass<_tagVersionHandle,32,0>", "uint" },
         { "void*", "System.IntPtr" }
     };
 
@@ -131,8 +132,18 @@ public static class PrimitiveTypeMappings
         bool isPointer = normalized.EndsWith("*");
         if (isPointer)
         {
-            // All pointers become void* in C# unsafe structs for simplicity
-            return "void*";
+            // Special case for void* to map to System.IntPtr
+            if (normalized == "void*")
+            {
+                if (CppToCSharp.TryGetValue("void*", out string? mapped))
+                    return mapped;
+                return "System.IntPtr";
+            }
+
+            // Unknown pointers: Map the base type recursively
+            // e.g. "MyType*" -> "ACBindings.MyType*"
+            string baseTypePtr = normalized.Substring(0, normalized.Length - 1);
+            return MapType(baseTypePtr) + "*";
         }
 
         // Check if it's a reference (treat as pointer)
@@ -399,6 +410,6 @@ public static class PrimitiveTypeMappings
     public static string CleanTypeName(string name)
     {
         if (string.IsNullOrEmpty(name)) return name;
-        return name.Replace("$", "");
+        return name.Replace("$", "_");
     }
 }

@@ -663,13 +663,13 @@ public class CSharpBindingsGenerator
         // Handle vtable pointers specially
         if (PrimitiveTypeMappings.IsVTablePointer(member.Name, member.TypeString))
         {
-            csType = "void*";
+            csType = "System.IntPtr";
             comment = " // vtable pointer";
         }
         else if (member.IsFunctionPointer)
         {
             // Function pointer member - use void* for simplicity
-            csType = "void*";
+            csType = "System.IntPtr";
             comment = " // function pointer";
         }
         else
@@ -689,7 +689,17 @@ public class CSharpBindingsGenerator
                 }
 
                 // For non-primitive arrays, use pointer
-                csType = "void*";
+                // Map the base type and append *
+                string mappedBaseType = PrimitiveTypeMappings.MapType(member.TypeString ?? "void");
+
+                if (member.TypeReference != null && !string.IsNullOrEmpty(member.TypeReference.FullyQualifiedType))
+                {
+                    // Use TypeReference name if available for cleaner mapping
+                    // Just a placeholder check for now
+                }
+
+                // Explicitly reconstruct pointer type
+                csType = mappedBaseType.TrimEnd('*') + "*";
                 comment = $" // array[{member.TypeReference.ArraySize.Value}]";
             }
         }

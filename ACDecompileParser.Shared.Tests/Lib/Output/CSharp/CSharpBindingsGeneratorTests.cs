@@ -90,7 +90,7 @@ public class CSharpBindingsGeneratorTests
         // Basic verification
         Assert.Contains("public unsafe struct Render", output);
         Assert.Contains(": System.IDisposable", output);
-        Assert.Contains("public void* __vftable;", output);
+        Assert.Contains("public System.IntPtr __vftable;", output);
         Assert.Contains("public uint m_nDisplayAdapter;", output);
 
         // Constructor/Destructor internal
@@ -326,14 +326,14 @@ public class CSharpBindingsGeneratorTests
         _testOutput.WriteLine(output);
 
         // Verify namespace replacement in member types
-        Assert.Contains("public void* m_ptr;", output); // Pointers are always void* but MapType handles it
+        Assert.Contains("public ACBindings.Core.Base* m_ptr;", output); // Pointers are now typed
         Assert.Contains("public ACBindings.Core.Value m_val;", output);
 
         // Verify namespace replacement in base class
         Assert.Contains("public ACBindings.Core.Base BaseClass_Core_Base;", output);
 
         // Verify namespace replacement in return types
-        Assert.Contains("public void* GetBase()", output);
+        Assert.Contains("public ACBindings.Core.Base* GetBase()", output);
 
         // Verify pulled up static method
         Assert.Contains("public static int StaticMethod() => ACBindings.Core.Base.StaticMethod();", output);
