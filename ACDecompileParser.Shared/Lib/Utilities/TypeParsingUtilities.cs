@@ -12,13 +12,12 @@ public class TypeParsingUtilities
     public static ParsedTypeInfo ParseType(string typeString)
     {
         var result = new ParsedTypeInfo();
-        
+
         // Store the original type string before any modifications
-        var originalTypeString = typeString;
-        
+
         // Clean the type string first - just use basic cleaning for now
         typeString = StripComments(typeString);
-        
+
         // Check for empty or whitespace-only strings first
         if (string.IsNullOrWhiteSpace(typeString))
         {
@@ -27,22 +26,35 @@ public class TypeParsingUtilities
             result.Namespace = string.Empty;
             return result;
         }
-        
-        result.FullTypeString = typeString;  // Store the cleaned but unnormalized string
-        
-        // Check for const modifier
+
+        result.FullTypeString = typeString; // Store the cleaned but unnormalized string
+
+        // Strip leading const/volatile
         if (typeString.StartsWith("const ", StringComparison.OrdinalIgnoreCase))
         {
             result.IsConst = true;
             typeString = typeString.Substring(6).Trim();
         }
-        // Check for volatile modifier
         else if (typeString.StartsWith("volatile ", StringComparison.OrdinalIgnoreCase))
         {
             result.IsVolatile = true;
             typeString = typeString.Substring(9).Trim();
         }
-        
+
+        // Handle const/volatile after pointer/reference or in the middle
+        // Example: "int *const"
+        // We'll strip these from the end to identify the pointer correctly
+        while (true)
+        {
+            string oldStr = typeString;
+            typeString = Regex.Replace(typeString, @"\b(const|volatile)\s*$", "", RegexOptions.IgnoreCase).Trim();
+            if (typeString == oldStr) break;
+
+            // Mark if we found const/volatile at the end
+            if (oldStr.EndsWith("const", StringComparison.OrdinalIgnoreCase)) result.IsConst = true;
+            if (oldStr.EndsWith("volatile", StringComparison.OrdinalIgnoreCase)) result.IsVolatile = true;
+        }
+
         // Check for pointer or reference at the end
         if (typeString.EndsWith("*"))
         {
@@ -53,6 +65,7 @@ public class TypeParsingUtilities
                 count++;
                 typeString = typeString.Substring(0, typeString.Length - 1).Trim();
             }
+
             result.PointerDepth = count;
         }
         else if (typeString.EndsWith("&"))
@@ -60,21 +73,32 @@ public class TypeParsingUtilities
             result.IsReference = true;
             typeString = typeString.Substring(0, typeString.Length - 1).Trim();
         }
-        
+
+        // Double check for const/volatile again after stripping pointers (e.g. "int const *")
+        while (true)
+        {
+            string oldStr = typeString;
+            typeString = Regex.Replace(typeString, @"\b(const|volatile)\s*$", "", RegexOptions.IgnoreCase).Trim();
+            if (typeString == oldStr) break;
+
+            if (oldStr.EndsWith("const", StringComparison.OrdinalIgnoreCase)) result.IsConst = true;
+            if (oldStr.EndsWith("volatile", StringComparison.OrdinalIgnoreCase)) result.IsVolatile = true;
+        }
+
         // Handle the case where the type has nested structure with templates
         // For cases like "AC1Legacy::PQueueArray<double>::PQueueNode", we need to find the last "::"
         // that's not inside angle brackets to separate the namespace from the base name first
         int lastNamespaceSeparator = FindLastNamespaceSeparatorOutsideTemplates(typeString);
-        
+
         string baseTypeName = typeString;
         string namespacePart = string.Empty;
-        
+
         if (lastNamespaceSeparator > 0)
         {
             namespacePart = typeString.Substring(0, lastNamespaceSeparator);
             baseTypeName = typeString.Substring(lastNamespaceSeparator + 2);
         }
-        
+
         // Now parse the base type name (which may contain template arguments)
         int templateStart = baseTypeName.IndexOf('<');
         if (templateStart > 0)
@@ -104,7 +128,7 @@ public class TypeParsingUtilities
                     var parsedParam = ParseType(param);
                     result.TemplateArguments.Add(parsedParam);
                 }
-                
+
                 // Combine namespace part with the actual base name and suffix
                 if (!string.IsNullOrEmpty(namespacePart))
                 {
@@ -119,14 +143,14 @@ public class TypeParsingUtilities
             {
                 // Fallback to old behavior if no matching bracket found - this handles malformed templates
                 // For malformed templates, we should still extract the base name before the template part
-                result.BaseName = baseTypeName.Substring(0, templateStart);  // Just the part before '<'
-                
+                result.BaseName = baseTypeName.Substring(0, templateStart); // Just the part before '<'
+
                 // If there was a namespace part, combine it back
                 if (!string.IsNullOrEmpty(namespacePart))
                 {
                     result.BaseName = namespacePart + "::" + result.BaseName;
                 }
-                
+
                 // Extract namespace again from the corrected base name
                 int malformedFinalNamespaceEnd = FindLastNamespaceSeparatorOutsideTemplates(result.BaseName);
                 if (malformedFinalNamespaceEnd > 0)
@@ -134,7 +158,7 @@ public class TypeParsingUtilities
                     result.Namespace = result.BaseName.Substring(0, malformedFinalNamespaceEnd);
                     result.BaseName = result.BaseName.Substring(malformedFinalNamespaceEnd + 2);
                 }
-                
+
                 return result; // Return early for malformed templates to avoid double namespace processing
             }
         }
@@ -143,7 +167,7 @@ public class TypeParsingUtilities
             // No templates in the base type name
             result.BaseName = typeString;
         }
-        
+
         // Now extract namespace from the final BaseName if it contains "::"
         int finalNamespaceEnd = FindLastNamespaceSeparatorOutsideTemplates(result.BaseName);
         if (finalNamespaceEnd > 0)
@@ -153,10 +177,10 @@ public class TypeParsingUtilities
         }
         // If no namespace separator found in the final BaseName, namespace remains empty
         // and the full type name is in BaseName
-        
+
         return result;
     }
-    
+
     /// <summary>
     /// Splits template parameters by comma, respecting nested angle brackets
     /// </summary>
@@ -219,6 +243,7 @@ public class TypeParsingUtilities
                     return i;
             }
         }
+
         return -1;
     }
 
@@ -229,7 +254,7 @@ public class TypeParsingUtilities
     {
         int lastSeparator = -1;
         int angleBracketDepth = 0;
-        
+
         for (int i = 0; i < str.Length - 1; i++)
         {
             if (str[i] == '<')
@@ -246,7 +271,7 @@ public class TypeParsingUtilities
                 lastSeparator = i;
             }
         }
-        
+
         return lastSeparator;
     }
 
@@ -257,10 +282,10 @@ public class TypeParsingUtilities
     {
         if (string.IsNullOrEmpty(input))
             return input;
-            
+
         var result = new StringBuilder();
         int i = 0;
-        
+
         while (i < input.Length)
         {
             // Check for line comment
@@ -271,9 +296,10 @@ public class TypeParsingUtilities
                 {
                     i++;
                 }
+
                 continue;
             }
-            
+
             // Check for block comment
             if (i < input.Length - 1 && input[i] == '/' && input[i + 1] == '*')
             {
@@ -283,14 +309,15 @@ public class TypeParsingUtilities
                 {
                     i++;
                 }
+
                 i += 2; // Skip */
                 continue;
             }
-            
+
             result.Append(input[i]);
             i++;
         }
-        
+
         return result.ToString();
     }
 }

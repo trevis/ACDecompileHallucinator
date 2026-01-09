@@ -211,16 +211,29 @@ public class MemberParser
 
                 // Check if the type string ends with a pointer asterisk and extract it
                 bool isPointer = false;
+
+                // Strip trailing const/volatile modifiers that might appear after the pointer
+                // Example: "IUnknown *const" -> "IUnknown *"
+                string typeStringForPointerCheck = rawTypeString;
+                while (true)
+                {
+                    string oldStr = typeStringForPointerCheck;
+                    typeStringForPointerCheck = Regex.Replace(typeStringForPointerCheck, @"\b(const|volatile)\s*$", "",
+                        RegexOptions.IgnoreCase).Trim();
+                    if (typeStringForPointerCheck == oldStr) break;
+                }
+
                 string cleanTypeString = rawTypeString;
 
-                if (rawTypeString.EndsWith("*"))
+                if (typeStringForPointerCheck.EndsWith("*"))
                 {
                     // Remove trailing asterisks and spaces to determine if it's a pointer
-                    int endPos = rawTypeString.Length - 1;
-                    while (endPos >= 0 && (rawTypeString[endPos] == '*' || rawTypeString[endPos] == ' ' ||
-                                           rawTypeString[endPos] == '\t'))
+                    int endPos = typeStringForPointerCheck.Length - 1;
+                    while (endPos >= 0 && (typeStringForPointerCheck[endPos] == '*' ||
+                                           typeStringForPointerCheck[endPos] == ' ' ||
+                                           typeStringForPointerCheck[endPos] == '\t'))
                     {
-                        if (rawTypeString[endPos] == '*')
+                        if (typeStringForPointerCheck[endPos] == '*')
                         {
                             isPointer = true;
                         }
@@ -230,7 +243,7 @@ public class MemberParser
 
                     if (endPos >= 0)
                     {
-                        cleanTypeString = rawTypeString.Substring(0, endPos + 1).Trim();
+                        cleanTypeString = typeStringForPointerCheck.Substring(0, endPos + 1).Trim();
                     }
                     else
                     {
@@ -243,13 +256,14 @@ public class MemberParser
 
                 // Count the actual pointer depth from the raw type string
                 int pointerDepth = 0;
-                if (rawTypeString.EndsWith("*"))
+                if (typeStringForPointerCheck.EndsWith("*"))
                 {
                     // Count the number of asterisks at the end of the type string
-                    int pos = rawTypeString.Length - 1;
-                    while (pos >= 0 && (rawTypeString[pos] == '*' || char.IsWhiteSpace(rawTypeString[pos])))
+                    int pos = typeStringForPointerCheck.Length - 1;
+                    while (pos >= 0 && (typeStringForPointerCheck[pos] == '*' ||
+                                        char.IsWhiteSpace(typeStringForPointerCheck[pos])))
                     {
-                        if (rawTypeString[pos] == '*')
+                        if (typeStringForPointerCheck[pos] == '*')
                         {
                             pointerDepth++;
                         }
@@ -268,7 +282,7 @@ public class MemberParser
 
                 return new StructMemberModel
                 {
-                    TypeString = ParsingUtilities.NormalizeTypeString(rawTypeString),
+                    TypeString = ParsingUtilities.NormalizeTypeString(typeStringForPointerCheck),
                     Name = ParsingUtilities.ExtractNameFromDeclaration(
                         declarationToParseWithoutSemicolon, file, lineNumber), // Use the version without semicolon
                     Source = line.Trim(),

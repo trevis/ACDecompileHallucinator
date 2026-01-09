@@ -227,6 +227,7 @@ public class MemberParserTests
         Assert.True(result.IsFunctionPointer);
         Assert.Null(result.Alignment);
     }
+
     [Fact]
     public void ParseMemberDeclaration_HandlesDecompilerComments()
     {
@@ -240,6 +241,49 @@ public class MemberParserTests
         Assert.NotNull(result);
         Assert.Equal("MyMember", result.Name);
         Assert.Equal("bool", result.TypeString);
+    }
+
+    #endregion
+
+    #region Const Parsing Tests
+
+    [Fact]
+    public void ParseMemberDeclaration_HandlesConstPointer()
+    {
+        // Arrange
+        var line = "IUnknown *const m_pUnknown;";
+
+        // Act
+        var result = MemberParser.ParseMemberDeclaration(line);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal("m_pUnknown", result.Name);
+        // TypeString should be normalized and devoid of "const" for *const pattern
+        Assert.Equal("IUnknown*", result.TypeString);
+        Assert.NotNull(result.TypeReference);
+        Assert.True(result.TypeReference.IsPointer, "Should be identified as a pointer");
+    }
+
+    [Fact]
+    public void ParseMemberDeclaration_HandlesConstBeforeType()
+    {
+        var line = "const int x;";
+        var result = MemberParser.ParseMemberDeclaration(line);
+        Assert.NotNull(result);
+        Assert.Equal("x", result.Name);
+        Assert.EndsWith("int", result.TypeString);
+    }
+
+    [Fact]
+    public void ParseMemberDeclaration_HandlesConstInMiddle()
+    {
+        var line = "int const * x;"; // pointer to const int
+        var result = MemberParser.ParseMemberDeclaration(line);
+        Assert.NotNull(result);
+        Assert.Equal("x", result.Name);
+        Assert.NotNull(result.TypeReference);
+        Assert.True(result.TypeReference.IsPointer);
     }
 
     #endregion
