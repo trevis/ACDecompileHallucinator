@@ -98,15 +98,18 @@ public static class PrimitiveTypeMappings
         { "void*", "System.IntPtr" },
         { "_DWORD", "int" },
         { "HRESULT", "int" },
-        {  "sockaddr_in", "int" },
+        { "sockaddr_in", "int" },
         { "LPBYTE", "byte*" },
         { "HKEY", "int" },
-        { "HWND__", "int"},
+        { "HWND__", "int" },
         { "HINSTANCE__", "int" },
         { "HACCEL__", "int" },
         { "HICON__", "int" },
-        { "LPCSTR", "sbyte*"},
-        { "_iobuf", "byte"}
+        { "LPCSTR", "sbyte*" },
+        { "_iobuf", "byte" },
+        { "_IDClass", "uint" },
+        { "_InstanceID", "ulong" }
+
     };
 
     /// <summary>
@@ -181,14 +184,23 @@ public static class PrimitiveTypeMappings
 
                 if (isUnknownType || isIgnoredType)
                 {
+                    // Before falling back to System.IntPtr, check if the base type is a C++ primitive
+                    // that can be mapped to a C# primitive type
+                    string pointerBase = normalized.Substring(0, normalized.Length - 1);
+                    string? mappedPrimitive = TryMapToPrimitive(pointerBase);
+                    if (mappedPrimitive != null)
+                    {
+                        return mappedPrimitive + "*";
+                    }
+
                     return "System.IntPtr";
                 }
             }
 
             // Known/parsed pointers: Map the base type recursively
             // e.g. "MyType*" -> "ACBindings.MyType*"
-            string baseTypePtr = normalized.Substring(0, normalized.Length - 1);
-            return MapType(baseTypePtr, typeRef: null) + "*";
+            string pointerBaseType = normalized.Substring(0, normalized.Length - 1);
+            return MapType(pointerBaseType, typeRef: null) + "*";
         }
 
         // Check if it's a reference (treat as pointer)
@@ -219,9 +231,7 @@ public static class PrimitiveTypeMappings
             baseType.Equals("_STL::vector", StringComparison.OrdinalIgnoreCase))
         {
             return "long";
-        }
-
-        // Check for generics
+        }// Check for generics
         int openBracket = baseType.IndexOf('<');
         if (openBracket != -1)
         {
@@ -231,7 +241,18 @@ public static class PrimitiveTypeMappings
             if (closeBracket > openBracket)
             {
                 string templateArgsText = baseType.Substring(openBracket + 1, closeBracket - openBracket - 1);
-                return ProcessGenericType(genericBase, templateArgsText);
+                string processedGeneric = ProcessGenericType(genericBase, templateArgsText);
+
+                // Check for nested type suffix after the closing bracket (e.g., "::randctx" in "QTIsaac<8,unsigned long>::randctx")
+                if (closeBracket < baseType.Length - 1)
+                {
+                    string suffix = baseType.Substring(closeBracket + 1);
+                    // Convert :: to . for C# nested type syntax
+                    suffix = suffix.Replace("::", ".");
+                    return processedGeneric + suffix;
+                }
+
+                return processedGeneric;
             }
         }
 
@@ -536,6 +557,7 @@ public static class PrimitiveTypeMappings
         if (c == '-' && arg.Length > 1 && char.IsDigit(arg[1])) return true;
         return false;
     }
+
     /// <summary>
     /// Attempts to map a C++ type to a C# primitive type.
     /// Returns null if the type is not a recognized C++ primitive.
@@ -578,6 +600,7 @@ public static class PrimitiveTypeMappings
 
         return null;
     }
+
     /// <summary>
     /// Removes $ and other unwanted characters from a type name.
     /// </summary>
