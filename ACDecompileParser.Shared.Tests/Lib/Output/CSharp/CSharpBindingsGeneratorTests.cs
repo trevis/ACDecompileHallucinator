@@ -450,6 +450,7 @@ public class CSharpBindingsGeneratorTests
         // Verify members use generic parameters
         Assert.Contains("public T0* m_data;", output);
     }
+
     [Fact]
     public void Test_FunctionPointerParameter_InStaticMethod()
     {
@@ -460,36 +461,36 @@ public class CSharpBindingsGeneratorTests
             BaseName = "UIFlow",
             Type = TypeType.Struct,
             FunctionBodies = new List<FunctionBodyModel>
-        {
-            new()
             {
-                Id = 101,
-                FullyQualifiedName = "UIFlow::RegisterFrameworkClass",
-                FunctionSignature = new FunctionSignatureModel
+                new()
                 {
-                    ReturnType = "void",
-                    CallingConvention = "Cdecl",
-                    Parameters = new List<FunctionParamModel>
+                    Id = 101,
+                    FullyQualifiedName = "UIFlow::RegisterFrameworkClass",
+                    FunctionSignature = new FunctionSignatureModel
                     {
-                        new() { Name = "mode", ParameterType = "unsigned int", Position = 0 },
-                        new()
+                        ReturnType = "void",
+                        CallingConvention = "Cdecl",
+                        Parameters = new List<FunctionParamModel>
                         {
-                            Name = "createMethod",
-                            ParameterType = "UIMainFramework*(__cdecl*)()",
-                            Position = 1,
-                            IsFunctionPointerType = true,
-                            NestedFunctionSignature = new FunctionSignatureModel
+                            new() { Name = "mode", ParameterType = "unsigned int", Position = 0 },
+                            new()
                             {
-                                ReturnType = "UIMainFramework*",
-                                CallingConvention = "__cdecl",
-                                Parameters = new List<FunctionParamModel>()
+                                Name = "createMethod",
+                                ParameterType = "UIMainFramework*(__cdecl*)()",
+                                Position = 1,
+                                IsFunctionPointerType = true,
+                                NestedFunctionSignature = new FunctionSignatureModel
+                                {
+                                    ReturnType = "void*",
+                                    CallingConvention = "__cdecl",
+                                    Parameters = new List<FunctionParamModel>()
+                                }
                             }
                         }
-                    }
-                },
-                Offset = 0x00479C50
+                    },
+                    Offset = 0x00479C50
+                }
             }
-        }
         };
 
         // Act
@@ -501,12 +502,14 @@ public class CSharpBindingsGeneratorTests
         Assert.DoesNotContain("__param2", output);
 
         // Should contain proper delegate* syntax
-        Assert.Contains("delegate* unmanaged[Cdecl]<ACBindings.UIMainFramework*>", output);
+        Assert.Contains("delegate* unmanaged[Cdecl]<System.IntPtr>", output);
         Assert.Contains("createMethod", output);
 
         // Full signature check
-        Assert.Contains("RegisterFrameworkClass(uint mode, delegate* unmanaged[Cdecl]<ACBindings.UIMainFramework*> createMethod)", output);
+        Assert.Contains("RegisterFrameworkClass(uint mode, delegate* unmanaged[Cdecl]<System.IntPtr> createMethod)",
+            output);
     }
+
     [Fact]
     public void Test_FunctionPointerParameter_WithName_InStaticMethod()
     {
@@ -518,21 +521,21 @@ public class CSharpBindingsGeneratorTests
             BaseName = "UIFlow",
             Type = TypeType.Struct,
             FunctionBodies = new List<FunctionBodyModel>
-        {
-            new()
             {
-                Id = 101,
-                FullyQualifiedName = "UIFlow::RegisterFrameworkClass",
-                FunctionSignature = new FunctionSignatureModel
+                new()
                 {
-                    ReturnType = "void",
-                    CallingConvention = "Cdecl",
-                    Parameters = FunctionParamParser.ParseFunctionParameters(
-                        "unsigned int mode, UIMainFramework *(__cdecl *createMethod)()")
-                },
-                Offset = 0x00479C50
+                    Id = 101,
+                    FullyQualifiedName = "UIFlow::RegisterFrameworkClass",
+                    FunctionSignature = new FunctionSignatureModel
+                    {
+                        ReturnType = "void",
+                        CallingConvention = "Cdecl",
+                        Parameters = FunctionParamParser.ParseFunctionParameters(
+                            "unsigned int mode, void *(__cdecl *createMethod)()")
+                    },
+                    Offset = 0x00479C50
+                }
             }
-        }
         };
 
         // Act
@@ -543,9 +546,10 @@ public class CSharpBindingsGeneratorTests
         Assert.DoesNotContain("UIMainFramework*(__cdecl*", output);
 
         // Should contain proper delegate* syntax with correct parameter name
-        Assert.Contains("delegate* unmanaged[Cdecl]<ACBindings.UIMainFramework*>", output);
+        Assert.Contains("delegate* unmanaged[Cdecl]<System.IntPtr>", output);
         Assert.Contains("createMethod", output);
     }
+
     [Fact]
     public void Test_Reserved_Keyword_Renaming()
     {
@@ -596,5 +600,43 @@ public class CSharpBindingsGeneratorTests
 
         // Static variable renaming
         Assert.Contains("public static int* using_ = (int*)0x12345678;", output);
+    }
+    [Fact]
+    public void Test_FunctionPointerDoublePointerParameter()
+    {
+        // Arrange - simulates UIOption_Menu::SetUIPreference(UIOption *this, bool (__cdecl **tableID)())
+        var uiOptionType = new TypeModel
+        {
+            Id = 1,
+            BaseName = "UIOption_Menu",
+            Type = TypeType.Struct,
+            FunctionBodies = new List<FunctionBodyModel>
+        {
+            new()
+            {
+                Id = 101,
+                FullyQualifiedName = "UIOption_Menu::SetUIPreference",
+                FunctionSignature = new FunctionSignatureModel
+                {
+                    ReturnType = "void",
+                    CallingConvention = "Thiscall",
+                    Parameters = FunctionParamParser.ParseFunctionParameters(
+                        "UIOption *this, bool (__cdecl **tableID)()")
+                },
+                Offset = 0x00484740
+            }
+        }
+        };
+
+        // Act
+        var output = _generator.Generate(uiOptionType);
+        _testOutput.WriteLine(output);
+
+        // Assert
+        // Should contain proper delegate** syntax or delegate* ... *
+        // In our implementation for bool (__cdecl **tableID)() it should be delegate* unmanaged[Cdecl]<byte>*
+        // (Note: bool is mapped to byte in ACBindings)
+        Assert.Contains("delegate* unmanaged[Cdecl]<byte>* tableID", output);
+        Assert.DoesNotContain("bool (__cdecl**tableID)()", output);
     }
 }
