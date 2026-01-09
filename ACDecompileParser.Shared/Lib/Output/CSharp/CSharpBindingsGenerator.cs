@@ -58,7 +58,9 @@ public class CSharpBindingsGenerator
             foreach (var baseGroup in baseNameGroups)
             {
                 var instances = baseGroup.ToList();
-                if (instances.Count > 1 && instances.Any(t => t.IsGeneric))
+                bool hasGeneric = instances.Any(t => t.IsGeneric);
+
+                if (hasGeneric)
                 {
                     GenerateGenericStruct(instances, sb, 0); // File scoped, indent 0
                     sb.AppendLine();
@@ -92,12 +94,10 @@ public class CSharpBindingsGenerator
 
                 foreach (var baseGroup in baseNameGroups)
                 {
-                    // If we have multiple instantiations of a generic type, combine them
-                    // We need at least 2 to determine variance safely, or 1 if we decide to treat it as generic (future)
-                    // For now, require > 1 and IsGeneric
                     var instances = baseGroup.ToList();
+                    bool hasGeneric = instances.Any(t => t.IsGeneric);
 
-                    if (instances.Count > 1 && instances.Any(t => t.IsGeneric))
+                    if (hasGeneric)
                     {
                         GenerateGenericStruct(instances, sb, 1);
                         sb.AppendLine();
@@ -123,8 +123,6 @@ public class CSharpBindingsGenerator
 
     private void GenerateType(TypeModel type, System.Text.StringBuilder sb, int indentLevel)
     {
-        string indent = new string(' ', indentLevel * 4);
-
         if (type.Type == TypeType.Enum)
         {
             GenerateEnum(type, sb, indentLevel);
@@ -260,7 +258,7 @@ public class CSharpBindingsGenerator
 
     private void GenerateGenericStruct(List<TypeModel> instantiations, System.Text.StringBuilder sb, int indentLevel)
     {
-        var type = instantiations.First(); // Representative
+        var type = instantiations.FirstOrDefault(t => t.IsGeneric) ?? instantiations.First(); // Representative
         string indent = new string(' ', indentLevel * 4);
         string memberIndent = new string(' ', (indentLevel + 1) * 4);
 
@@ -341,13 +339,10 @@ public class CSharpBindingsGenerator
     private string ResolveGenericType(List<string> variations, List<TypeModel> instantiations,
         List<(string Name, int Position)> genericParams)
     {
-        // Check if all same
-        if (variations.Distinct().Count() == 1)
-        {
-            return PrimitiveTypeMappings.MapType(variations[0]);
-        }
-
-        // Check matches against template args
+        // Check matches against template args first
+        // If it matches a template arg across all instantiations, we treat it as generic
+        // This handles both varying cases (T0=int, T0=float) and single-instance cases (T0=int)
+        // Note: For single instances, this might misidentify non-generic members as generic if types collide
         foreach (var (name, position) in genericParams)
         {
             bool match = true;
@@ -359,12 +354,25 @@ public class CSharpBindingsGenerator
                 string concreteT = instantiations[i].TemplateArguments.FirstOrDefault(t => t.Position == position)
                     ?.TypeString ?? "";
 
+                if (string.IsNullOrEmpty(concreteT))
+                {
+                    match = false;
+                    ptrMatch = false;
+                    continue;
+                }
+
                 if (variations[i] != concreteT) match = false;
                 if (variations[i] != concreteT + "*") ptrMatch = false; // Simple pointer check
             }
 
             if (match) return name;
             if (ptrMatch) return name + "*";
+        }
+
+        // Check if all same (constant across all instantiations)
+        if (variations.Distinct().Count() == 1)
+        {
+            return PrimitiveTypeMappings.MapType(variations[0]);
         }
 
         // Fallback for unmapped varying types
@@ -442,7 +450,7 @@ public class CSharpBindingsGenerator
 
     // Returns methods directly defined on this type (not inherited)
     private List<(FunctionBodyModel Method, TypeModel SourceType)> GetAllMethods(TypeModel type,
-        Dictionary<string, TypeModel> baseMap)
+        Dictionary<string, TypeModel> _)
     {
         var result = new List<(FunctionBodyModel, TypeModel)>();
         var signatures = new HashSet<string>();
@@ -629,33 +637,29 @@ public class CSharpBindingsGenerator
         {
             csType = PrimitiveTypeMappings.MapType(member.TypeString ?? "void", member.TypeReference);
 
-            // Handle arrays
-            if (member.TypeReference?.IsArray == true && member.TypeReference.ArraySize.HasValue)
             {
-                // C# fixed arrays: public fixed byte data[100];
-                string baseType = csType.TrimEnd('*');
-                if (IsPrimitiveForFixed(baseType))
+                var tr = member.TypeReference;
+                if (tr?.IsArray == true && tr.ArraySize.HasValue)
                 {
-                    string memberName = PrimitiveTypeMappings.SanitizeIdentifier(member.Name);
-                    sb.AppendLine(
-                        $"{indent}public fixed {baseType} {memberName}[{member.TypeReference.ArraySize.Value}];");
-                    return;
+                    // C# fixed arrays: public fixed byte data[100];
+                    string baseType = csType.TrimEnd('*');
+                    if (IsPrimitiveForFixed(baseType))
+                    {
+                        string memberName = PrimitiveTypeMappings.SanitizeIdentifier(member.Name);
+                        sb.AppendLine(
+                            $"{indent}public fixed {baseType} {memberName}[{tr.ArraySize.Value}];");
+                        return;
+                    }
+
+                    // For non-primitive arrays, use pointer
+                    // Map the base type and append *
+                    string mappedBaseType =
+                        PrimitiveTypeMappings.MapType(member.TypeString ?? "void", tr);
+
+                    // Explicitly reconstruct pointer type
+                    csType = mappedBaseType.TrimEnd('*') + "*";
+                    comment = $" // array[{tr.ArraySize.Value}]";
                 }
-
-                // For non-primitive arrays, use pointer
-                // Map the base type and append *
-                string mappedBaseType =
-                    PrimitiveTypeMappings.MapType(member.TypeString ?? "void", member.TypeReference);
-
-                if (member.TypeReference != null && !string.IsNullOrEmpty(member.TypeReference.FullyQualifiedType))
-                {
-                    // Use TypeReference name if available for cleaner mapping
-                    // Just a placeholder check for now
-                }
-
-                // Explicitly reconstruct pointer type
-                csType = mappedBaseType.TrimEnd('*') + "*";
-                comment = $" // array[{member.TypeReference.ArraySize.Value}]";
             }
         }
 
