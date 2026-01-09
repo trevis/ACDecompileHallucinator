@@ -783,12 +783,22 @@ public class CSharpBindingsGenerator
 
         var typeParams = string.Join(", ", paramTypes);
 
+        string baseDecl;
         if (string.IsNullOrEmpty(callingConv))
         {
-            return $"delegate* unmanaged<{typeParams}>";
+            baseDecl = $"delegate* unmanaged<{typeParams}>";
+        }
+        else
+        {
+            baseDecl = $"delegate* unmanaged[{callingConv}]<{typeParams}>";
         }
 
-        return $"delegate* unmanaged[{callingConv}]<{typeParams}>";
+        if (param.PointerDepth > 1)
+        {
+            return baseDecl + new string('*', param.PointerDepth - 1);
+        }
+
+        return baseDecl;
     }
 
     private void GenerateStaticMethod(string methodName, string returnType, string callingConv,

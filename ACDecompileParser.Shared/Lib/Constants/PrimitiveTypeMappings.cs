@@ -453,7 +453,18 @@ public static class PrimitiveTypeMappings
     public static string CleanTypeName(string name)
     {
         if (string.IsNullOrEmpty(name)) return name;
-        return name.Replace("$", "_");
+
+        // Manually handle the specific decompiler artifact BEFORE stripping comments
+        string artifact = "// local variable allocation has failed, the output may be wrong!";
+        if (name.Contains(artifact))
+        {
+            name = name.Replace(artifact, "");
+        }
+
+        // Strip comments first to handle other comments robustly
+        var cleaned = ParsingUtilities.StripComments(name).Trim();
+
+        return cleaned.Replace("$", "_");
     }
 
     /// <summary>

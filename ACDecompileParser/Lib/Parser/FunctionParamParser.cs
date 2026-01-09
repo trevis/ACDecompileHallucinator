@@ -135,13 +135,15 @@ public class FunctionParamParser
 
         return parameters;
     }
+
     /// <summary>
     /// Parses a function pointer parameter (e.g., HRESULT (__cdecl *)(const unsigned __int16 *))
     /// </summary>
     private static FunctionParamModel? ParseFunctionPointerParameter(string param, int position, string? file = null,
         int? lineNumber = null, string? source = null)
     {
-        var (returnType, callingConvention, innerParams, extractedName) = ParsingUtilities.ExtractFunctionPointerParameterInfo(param);
+        var (returnType, callingConvention, innerParams, extractedName, pointerDepth) =
+            ParsingUtilities.ExtractFunctionPointerParameterInfo(param);
 
         if (returnType == null)
             return null;
@@ -180,11 +182,13 @@ public class FunctionParamParser
             File = file,
             Position = position,
             IsFunctionPointerType = true,
+            PointerDepth = pointerDepth,
             NestedFunctionSignature = functionSignature,
             TypeReference = null, // Function pointer params don't have a simple type reference
             TypeReferenceId = null
         };
     }
+
     /// <summary>
     /// Parses parameters for a function signature (used for nested function pointer types)
     /// </summary>
@@ -261,13 +265,15 @@ public class FunctionParamParser
 
         return parameters;
     }
+
     /// <summary>
     /// Parses a nested function pointer to create a FunctionSignatureModel
     /// </summary>
     private static (FunctionSignatureModel Signature, string RawParam)? ParseNestedFunctionSignature(string param,
         int position, string? file = null, int? lineNumber = null, string? source = null)
     {
-        var (returnType, callingConvention, innerParams, extractedName) = ParsingUtilities.ExtractFunctionPointerParameterInfo(param);
+        var (returnType, callingConvention, innerParams, extractedName, _) =
+            ParsingUtilities.ExtractFunctionPointerParameterInfo(param);
 
         if (returnType == null)
             return null;
@@ -296,6 +302,7 @@ public class FunctionParamParser
 
         return (funcSig, param);
     }
+
     /// <summary>
     /// Renames duplicate parameter names by adding numeric suffixes (_1, _2, etc.)
     /// </summary>

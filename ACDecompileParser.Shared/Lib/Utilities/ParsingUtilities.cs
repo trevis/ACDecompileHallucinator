@@ -32,15 +32,18 @@ public static class ParsingUtilities
     /// <summary>
     /// Strips C-style comments from a declaration
     /// </summary>
-    public static string StripComments(string declaration)
+    public static string StripComments(string input)
     {
-        // Handle null input to prevent exceptions
-        if (declaration == null)
-            return string.Empty;
+        if (string.IsNullOrEmpty(input)) return input;
 
-        // Remove C-style comments /* */ from the declaration
-        // This handles both offset comments like /* 0x08 */ and other comments like /*VFT*/
-        return Regex.Replace(declaration, @"/\*\s*[^*]*\*+([^/*][^*]*\*+)*/", string.Empty);
+        // Remove block comments /* ... */
+        var blockCommentsRemoved = Regex.Replace(input, @"/\*.*?\*/", string.Empty, RegexOptions.Singleline);
+
+        // Remove line comments // ... 
+        // We match // until the end of the line OR end of string
+        var lineCommentsRemoved = Regex.Replace(blockCommentsRemoved, @"//.*?(?=\r?\n|$)", string.Empty);
+
+        return lineCommentsRemoved;
     }
 
     /// <summary>
@@ -933,6 +936,7 @@ public static class ParsingUtilities
 
         return (false, null);
     }
+
     public static bool IsFunctionPointerParameter(string paramString)
     {
         if (string.IsNullOrWhiteSpace(paramString))
@@ -948,34 +952,38 @@ public static class ParsingUtilities
 
         // Check for the pointer-in-parens pattern followed by a parameter list
         // The name is optional: (*), (__cdecl *), (__cdecl *createMethod), (*myFunc), etc.
-        var pattern = @"\(\s*(__thiscall|__stdcall|__cdecl|__fastcall)?\s*\*\s*\w*\s*\)\s*\(";
+        // We now support multiple asterisks for pointers to function pointers
+        var pattern = @"\(\s*(__thiscall|__stdcall|__cdecl|__fastcall)?\s*\*+\s*\w*\s*\)\s*\(";
         return Regex.IsMatch(trimmed, pattern);
     }
-    public static (string? ReturnType, string? CallingConvention, string? Parameters, string? Name)
+
+    public static (string? ReturnType, string? CallingConvention, string? Parameters, string? Name, int PointerDepth)
         ExtractFunctionPointerParameterInfo(string paramString)
     {
         if (!IsFunctionPointerParameter(paramString))
-            return (null, null, null, null);
+            return (null, null, null, null, 0);
 
         var trimmed = paramString.Trim();
 
         // Pattern to match function pointer: ReturnType (CallingConvention *[name])(Params)
-        // Groups: 1=ReturnType, 2=CallingConvention (optional), 3=Name (optional), 4=Parameters
-        var pattern = @"^(.+?)\s*\(\s*(__thiscall|__stdcall|__cdecl|__fastcall)?\s*\*\s*(\w*)\s*\)\s*\((.*?)?\)$";
+        // Groups: 1=ReturnType, 2=CallingConvention (optional), 3=Pointers, 4=Name (optional), 5=Parameters
+        var pattern = @"^(.+?)\s*\(\s*(__thiscall|__stdcall|__cdecl|__fastcall)?\s*(\*+)\s*(\w*)\s*\)\s*\((.*?)?\)$";
         var match = Regex.Match(trimmed, pattern);
 
         if (match.Success)
         {
             string returnType = match.Groups[1].Value.Trim();
             string callingConvention = match.Groups[2].Success ? match.Groups[2].Value.Trim() : string.Empty;
-            string name = match.Groups[3].Success ? match.Groups[3].Value.Trim() : string.Empty;
-            string parameters = match.Groups[4].Success ? match.Groups[4].Value.Trim() : string.Empty;
+            string pointers = match.Groups[3].Value;
+            string name = match.Groups[4].Success ? match.Groups[4].Value.Trim() : string.Empty;
+            string parameters = match.Groups[5].Success ? match.Groups[5].Value.Trim() : string.Empty;
 
-            return (returnType, callingConvention, parameters, name);
+            return (returnType, callingConvention, parameters, name, pointers.Length);
         }
 
-        return (null, null, null, null);
+        return (null, null, null, null, 0);
     }
+
     /// <summary>
     /// Checks if a function pointer has a function pointer return type.
     /// These look like: HRESULT (__cdecl *(__thiscall *GetWndProc)(IKeystoneDocument *this))(IKeystoneWindow *, unsigned int, unsigned int, int)

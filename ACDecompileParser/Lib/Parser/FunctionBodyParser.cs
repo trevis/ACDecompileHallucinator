@@ -74,12 +74,22 @@ public class FunctionBodyParser
                         if (currentLine.Contains("{"))
                         {
                             int braceIndex = currentLine.IndexOf('{');
-                            sigBuilder.Append(currentLine.Substring(0, braceIndex).Trim());
+                            var linePart = currentLine.Substring(0, braceIndex);
+                            var stripped = ParsingUtilities.StripComments(linePart).Trim();
+                            if (!string.IsNullOrEmpty(stripped))
+                            {
+                                sigBuilder.Append(stripped).Append(" ");
+                            }
+
                             foundBodyStart = true;
                         }
                         else
                         {
-                            sigBuilder.Append(currentLine.Trim()).Append(" ");
+                            var stripped = ParsingUtilities.StripComments(currentLine).Trim();
+                            if (!string.IsNullOrEmpty(stripped))
+                            {
+                                sigBuilder.Append(stripped).Append(" ");
+                            }
                         }
                     }
 

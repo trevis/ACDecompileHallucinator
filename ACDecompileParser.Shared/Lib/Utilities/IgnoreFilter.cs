@@ -45,7 +45,7 @@ public static class IgnoreFilter
         "ICallFactory", "IBlockingLock", "IBaseFilter", "IAdviseSink", "FOURCCMap",
         "CMsg", "CEm", "CEd", "CAutoUsingOutputPin", "BIDI_TYPE", "IMPORT_OBJECT_HEADER",
         "FallocPool", "IntrusiveLFData", "Intrusive_MW", "ANON_OBJECT_HEADER",
-        "ANSIColorStatus", "ARRAY_INFO"
+        "ANSIColorStatus", "ARRAY_INFO", "CHid'"
     };
 
     public static readonly HashSet<string> IgnoreSuffixes = new HashSet<string>
@@ -56,7 +56,7 @@ public static class IgnoreFilter
     public static readonly HashSet<string> Whitelist = new HashSet<string>
     {
         "_IDClass", "D3DPolyRender", "_GUID", "IFileNodeName", "IFileNodeName_vtbl",
-        "_tagDataID", "_tag", "_tagVersionHandle", "_tagCellID", "tagPOINT"
+        "_tagDataID", "_tag", "_tagVersionHandle", "_tagCellID", "tagPOINT", "CEmoteTable"
     };
 
     /// <summary>

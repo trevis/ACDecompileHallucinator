@@ -24,4 +24,9 @@ public class FunctionParamModel : BaseMemberModel
 
     // Navigation property for the type reference (not stored in DB)
     public TypeReference? TypeReference { get; set; }
+
+    /// <summary>
+    /// Pointer depth for function pointer types (e.g. 1 for *, 2 for **)
+    /// </summary>
+    public int PointerDepth { get; set; } = 1;
 }
