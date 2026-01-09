@@ -536,7 +536,48 @@ public static class PrimitiveTypeMappings
         if (c == '-' && arg.Length > 1 && char.IsDigit(arg[1])) return true;
         return false;
     }
+    /// <summary>
+    /// Attempts to map a C++ type to a C# primitive type.
+    /// Returns null if the type is not a recognized C++ primitive.
+    /// </summary>
+    private static string? TryMapToPrimitive(string cppType)
+    {
+        if (string.IsNullOrWhiteSpace(cppType))
+            return null;
 
+        // Normalize the type string
+        string normalized = cppType
+            .Replace("const ", "")
+            .Replace(" const", "")
+            .Replace("volatile ", "")
+            .Replace(" volatile", "")
+            .Replace("struct ", "")
+            .Replace("enum ", "")
+            .Replace("union ", "")
+            .Trim();
+
+        // Handle pointer types recursively
+        if (normalized.EndsWith("*"))
+        {
+            string baseType = normalized.Substring(0, normalized.Length - 1);
+            string? mappedBase = TryMapToPrimitive(baseType);
+            if (mappedBase != null)
+                return mappedBase + "*";
+            return null;
+        }
+
+        // Try to map to a C# primitive type
+        if (CppToCSharp.TryGetValue(normalized, out string? csType))
+        {
+            // Only return if it's an actual C# primitive (not ACBindings.* or other custom types)
+            if (!csType.StartsWith("ACBindings.") && !csType.StartsWith("System."))
+            {
+                return csType;
+            }
+        }
+
+        return null;
+    }
     /// <summary>
     /// Removes $ and other unwanted characters from a type name.
     /// </summary>
