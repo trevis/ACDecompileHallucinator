@@ -7,23 +7,23 @@ public class PrimitiveTypeMappingTests
 {
     [Theory]
     [InlineData("PrimitiveInplaceArray<ArchiveVersionRow::VersionEntry,8,1>",
-        "ACBindings.PrimitiveInplaceArray<ACBindings.ArchiveVersionRow.VersionEntry>")]
-    [InlineData("PrimitiveInplaceArray<int,10,4>", "ACBindings.PrimitiveInplaceArray<int>")]
-    [InlineData("PrimitiveInplaceArray<SomeType*,20,8>", "ACBindings.PrimitiveInplaceArray<Ptr<ACBindings.SomeType>>")]
+        "ACBindings.PrimitiveInplaceArray__ArchiveVersionRow_VersionEntry")]
+    [InlineData("PrimitiveInplaceArray<int,10,4>", "ACBindings.PrimitiveInplaceArray__int")]
+    [InlineData("PrimitiveInplaceArray<SomeType*,20,8>", "ACBindings.PrimitiveInplaceArray__SomeType_ptr")]
     [InlineData("int", "int")]
     [InlineData("ArchiveVersionRow::VersionEntry", "ACBindings.ArchiveVersionRow.VersionEntry")]
     [InlineData("Vector3", "ACBindings.Vector3")]
-    [InlineData("SmartArray<ACCharGenStartArea,1>", "ACBindings.SmartArray<ACBindings.ACCharGenStartArea>")]
+    [InlineData("SmartArray<ACCharGenStartArea,1>", "ACBindings.SmartArray__ACCharGenStartArea")]
     [InlineData("HashTable<unsigned long,HeritageGroup_CG,0>",
-        "ACBindings.HashTable<uint,ACBindings.HeritageGroup_CG>")]
-    [InlineData("Foo<Bar<int, 5>, 10>", "ACBindings.Foo<ACBindings.Bar<int>>")]
+        "ACBindings.HashTable__uint__HeritageGroup_CG")]
+    [InlineData("Foo<Bar<int, 5>, 10>", "ACBindings.Foo__Bar__int")]
     [InlineData("void*", "System.IntPtr")]
-    [InlineData("SmartArray<void*, 1>", "ACBindings.SmartArray<System.IntPtr>")]
-    [InlineData("PrimitiveInplaceArray<void*, 8, 1>", "ACBindings.PrimitiveInplaceArray<System.IntPtr>")]
-    [InlineData("HashTable<void*, int, 0>", "ACBindings.HashTable<System.IntPtr,int>")]
-    [InlineData("DArray<UnknownType*>", "ACBindings.DArray<Ptr<ACBindings.UnknownType>>")]
+    [InlineData("SmartArray<void*, 1>", "ACBindings.SmartArray__void_ptr")]
+    [InlineData("PrimitiveInplaceArray<void*, 8, 1>", "ACBindings.PrimitiveInplaceArray__void_ptr")]
+    [InlineData("HashTable<void*, int, 0>", "ACBindings.HashTable__void_ptr__int")]
+    [InlineData("DArray<UnknownType*>", "ACBindings.DArray__UnknownType_ptr")]
     [InlineData("Type$With$Dollars", "ACBindings.Type_With_Dollars")]
-    [InlineData("SmartArray<UIChildFramework*>", "ACBindings.SmartArray<Ptr<ACBindings.UIChildFramework>>")]
+    [InlineData("SmartArray<UIChildFramework*>", "ACBindings.SmartArray__UIChildFramework_ptr")]
     public void MapType_PrimitiveInplaceArray_RemovesLiteralArgs(string input, string expected)
     {
         var result = PrimitiveTypeMappings.MapType(input);
@@ -32,8 +32,8 @@ public class PrimitiveTypeMappingTests
 
     [Theory]
     [InlineData("PrimitiveInplaceArray<ArchiveVersionRow::VersionEntry,8,1>",
-        "ACBindings.PrimitiveInplaceArray<ACBindings.ArchiveVersionRow.VersionEntry>*")]
-    [InlineData("PrimitiveInplaceArray<int,10,4>", "ACBindings.PrimitiveInplaceArray<int>*")]
+        "ACBindings.PrimitiveInplaceArray__ArchiveVersionRow_VersionEntry*")]
+    [InlineData("PrimitiveInplaceArray<int,10,4>", "ACBindings.PrimitiveInplaceArray__int*")]
     public void MapTypeForStaticPointer_PrimitiveInplaceArray_RemovesLiteralArgs(string input, string expected)
     {
         var result = PrimitiveTypeMappings.MapTypeForStaticPointer(input);
@@ -50,9 +50,12 @@ public class PrimitiveTypeMappingTests
     [InlineData(null, null)]
     public void WrapPointerForGeneric_WrapsPointerTypes(string input, string expected)
     {
+        // This method usage is removed from ProcessGenericType but still exists as a helper
+        // We'll keep the test or remove it. Let's keep it to ensure logic didn't break even if unused.
         var result = PrimitiveTypeMappings.WrapPointerForGeneric(input);
         Assert.Equal(expected, result);
     }
+
     [Theory]
     [InlineData("Type$With$Dollars", "Type_With_Dollars")]
     [InlineData("// local variable allocation has failed, the output may be wrong! bool", "bool")]

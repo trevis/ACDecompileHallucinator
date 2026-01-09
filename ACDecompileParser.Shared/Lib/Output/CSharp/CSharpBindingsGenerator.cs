@@ -29,9 +29,13 @@ public class CSharpBindingsGenerator
     /// <summary>
     /// Generates C# binding code for a list of types with namespace header.
     /// </summary>
+    /// </summary>
     public string GenerateWithNamespace(List<TypeModel> types, string namespaceName = "ACBindings")
     {
         var sb = new System.Text.StringBuilder();
+
+        // Track generated type names to prevent duplicates (e.g. distinct TypeModels resolving to same flattened name)
+        var generatedNames = new HashSet<string>();
 
         // Group types by their Namespace
         var namespaceGroups = types
@@ -50,29 +54,12 @@ public class CSharpBindingsGenerator
             sb.AppendLine($"namespace {finalNs};");
             sb.AppendLine();
 
-            var baseNameGroups = group
-                .Where(t => t.ParentType == null)
-                .GroupBy(t => t.BaseName)
-                .ToList();
-
-            foreach (var baseGroup in baseNameGroups)
+            // Just generate all types flatly, no generic grouping needed
+            foreach (var type in group.Where(t => t.ParentType == null))
             {
-                var instances = baseGroup.ToList();
-                bool hasGeneric = instances.Any(t => t.IsGeneric);
-
-                if (hasGeneric)
-                {
-                    GenerateGenericStruct(instances, sb, 0); // File scoped, indent 0
-                    sb.AppendLine();
-                }
-                else
-                {
-                    foreach (var type in instances)
-                    {
-                        GenerateType(type, sb, 0); // File-scoped namespace, start at 0
-                        sb.AppendLine();
-                    }
-                }
+                if (ShouldSkipDuplicate(type, generatedNames)) continue;
+                GenerateType(type, sb, 0); // File-scoped namespace, start at 0
+                sb.AppendLine();
             }
         }
         else
@@ -86,31 +73,12 @@ public class CSharpBindingsGenerator
                 sb.AppendLine($"namespace {finalNs}");
                 sb.AppendLine("{");
 
-                // Group by BaseName to detect template instantiations
-                var baseNameGroups = group
-                    .Where(t => t.ParentType == null)
-                    .GroupBy(t => t.BaseName)
-                    .ToList();
-
-                foreach (var baseGroup in baseNameGroups)
+                // Just generate all types flatly
+                foreach (var type in group.Where(t => t.ParentType == null))
                 {
-                    var instances = baseGroup.ToList();
-                    bool hasGeneric = instances.Any(t => t.IsGeneric);
-
-                    if (hasGeneric)
-                    {
-                        GenerateGenericStruct(instances, sb, 1);
-                        sb.AppendLine();
-                    }
-                    else
-                    {
-                        // Standard generation
-                        foreach (var type in instances)
-                        {
-                            GenerateType(type, sb, 1);
-                            sb.AppendLine();
-                        }
-                    }
+                    if (ShouldSkipDuplicate(type, generatedNames)) continue;
+                    GenerateType(type, sb, 1);
+                    sb.AppendLine();
                 }
 
                 sb.AppendLine("}");
@@ -120,6 +88,28 @@ public class CSharpBindingsGenerator
 
         return sb.ToString();
     }
+
+    private bool ShouldSkipDuplicate(TypeModel type, HashSet<string> generatedNames)
+    {
+        string key;
+        if (type.Type == TypeType.Enum)
+        {
+            key = PrimitiveTypeMappings.CleanTypeName(type.BaseName);
+        }
+        else
+        {
+            // For structs/classes, use the full flattened name
+            // (e.g. ACBindings.HashSet__uint)
+            key = PrimitiveTypeMappings.MapType(type.NameWithTemplates);
+        }
+
+        if (generatedNames.Contains(key))
+            return true;
+
+        generatedNames.Add(key);
+        return false;
+    }
+
 
     private void GenerateType(TypeModel type, System.Text.StringBuilder sb, int indentLevel)
     {
@@ -133,6 +123,24 @@ public class CSharpBindingsGenerator
         }
     }
 
+    private static string GetGeneratedTypeName(TypeModel type)
+    {
+        if (type.Type == TypeType.Enum)
+        {
+            return PrimitiveTypeMappings.CleanTypeName(type.BaseName);
+        }
+
+        string flattenedName = PrimitiveTypeMappings.MapType(type.NameWithTemplates);
+        // MapType returns fully qualified (ACBindings.DArray__int), we just want the struct name here
+        int lastDot = flattenedName.LastIndexOf('.');
+        if (lastDot != -1)
+        {
+            flattenedName = flattenedName.Substring(lastDot + 1);
+        }
+
+        return PrimitiveTypeMappings.CleanTypeName(flattenedName);
+    }
+
     private void GenerateStruct(TypeModel type, System.Text.StringBuilder sb, int indentLevel)
     {
         // ... (this method start)
@@ -144,7 +152,9 @@ public class CSharpBindingsGenerator
         string interfaces = hasDestructor ? " : System.IDisposable" : "";
 
         // Struct declaration
-        string safeBaseName = PrimitiveTypeMappings.CleanTypeName(type.BaseName);
+        // Struct declaration
+        string safeBaseName = GetGeneratedTypeName(type);
+
         sb.AppendLine($"{indent}public unsafe struct {safeBaseName}{interfaces}");
         sb.AppendLine($"{indent}{{");
 
@@ -165,8 +175,11 @@ public class CSharpBindingsGenerator
                 string rawFqn = resolvedType.FullyQualifiedName;
                 if (string.IsNullOrEmpty(rawFqn) || rawFqn == "Unknown") rawFqn = bt.RelatedTypeString ?? "Unknown";
 
-                string cleanedFqn = PrimitiveTypeMappings.CleanTypeName(rawFqn);
-                string fieldName = $"BaseClass_{cleanedFqn.Replace("::", ".").Replace(".", "_")}";
+                // Mapped type for field name (to handle flattening in field names too if needed)
+                string mappedBase = PrimitiveTypeMappings.MapType(rawFqn); // This might be ACBindings.Base__int
+                string cleanedFqn = mappedBase.Replace("ACBindings.", "").Replace(".", "_");
+
+                string fieldName = $"BaseClass_{cleanedFqn}";
                 sb.AppendLine($"{memberIndent}public {baseTypeName} {fieldName}; // {baseTypeName}");
             }
 
@@ -191,8 +204,15 @@ public class CSharpBindingsGenerator
         {
             if (hasContent) sb.AppendLine();
             sb.AppendLine($"{memberIndent}// Child Types");
+
+            var generatedNestedTypes = new HashSet<string>();
             foreach (var nested in type.NestedTypes)
             {
+                string nestedName = GetGeneratedTypeName(nested);
+                if (generatedNestedTypes.Contains(nestedName))
+                    continue;
+
+                generatedNestedTypes.Add(nestedName);
                 GenerateType(nested, sb, indentLevel + 1);
             }
 
@@ -227,7 +247,7 @@ public class CSharpBindingsGenerator
             sb.AppendLine($"{memberIndent}// Generated Constructor");
             foreach (var ctor in constructors)
             {
-                GenerateCSharpConstructor(ctor, type.BaseName, sb, indentLevel + 1);
+                GenerateCSharpConstructor(ctor, safeBaseName, sb, indentLevel + 1);
             }
 
             hasContent = true;
@@ -250,133 +270,20 @@ public class CSharpBindingsGenerator
 
         foreach (var (method, sourceType) in allMethods)
         {
-            GenerateMethod(method, sourceType, type, sb, indentLevel + 1);
+            // Method generation might need to know the *flattened* name of the current type for constructors/destructors? 
+            // IsConstructor/IsDestructor logic uses type.BaseName. 
+            // But the generated constructor name inside C# should match the struct name (safeBaseName).
+
+            // We need to pass safeBaseName to GenerateMethod? 
+            // But GenerateMethod uses IsConstructor(fb, sourceType.BaseName).
+            // The method name itself in C++ is usually the BaseName (e.g. DArray).
+            // But in C#, the constructor must be DArray__int.
+            // So we need to handle that.
+
+            GenerateMethod(method, sourceType, type, safeBaseName, sb, indentLevel + 1);
         }
 
         sb.AppendLine($"{indent}}}");
-    }
-
-    private void GenerateGenericStruct(List<TypeModel> instantiations, System.Text.StringBuilder sb, int indentLevel)
-    {
-        var type = instantiations.FirstOrDefault(t => t.IsGeneric) ?? instantiations.First(); // Representative
-        string indent = new string(' ', indentLevel * 4);
-        string memberIndent = new string(' ', (indentLevel + 1) * 4);
-
-        string safeBaseName = PrimitiveTypeMappings.CleanTypeName(type.BaseName);
-
-        // Define generic parameters, excluding literals
-        var templateArgs = type.TemplateArguments?.OrderBy(ta => ta.Position).ToList() ??
-                           new List<TypeTemplateArgument>();
-        var genericParams = new List<(string Name, int Position)>();
-        int tIndex = 0;
-        foreach (var arg in templateArgs)
-        {
-            if (PrimitiveTypeMappings.IsNumericLiteral(arg.TypeString))
-                continue;
-
-            genericParams.Add(($"T{tIndex}", arg.Position));
-            tIndex++;
-        }
-
-        string genericPart = genericParams.Any() ? $"<{string.Join(", ", genericParams.Select(p => p.Name))}>" : "";
-        string structDecl = $"public unsafe struct {safeBaseName}{genericPart}";
-
-        // Check for destructor in hierarchy (using representative)
-        bool hasDestructor = HasDestructorInHierarchy(type);
-        if (hasDestructor) structDecl += " : System.IDisposable";
-
-        sb.AppendLine($"{indent}{structDecl}");
-        sb.AppendLine($"{indent}{{");
-
-        // Variance Analysis for Members
-        var memberMap = new Dictionary<int, List<string>>();
-
-        foreach (var inst in instantiations)
-        {
-            var instMembers = inst.StructMembers ?? _repository?.GetStructMembersWithRelatedTypes(inst.Id).ToList() ??
-                new List<StructMemberModel>();
-            foreach (var m in instMembers)
-            {
-                if (!memberMap.ContainsKey(m.DeclarationOrder)) memberMap[m.DeclarationOrder] = new List<string>();
-                memberMap[m.DeclarationOrder].Add(m.TypeString ?? "void");
-            }
-        }
-
-        var repMembers = type.StructMembers ?? _repository?.GetStructMembersWithRelatedTypes(type.Id).ToList() ??
-            new List<StructMemberModel>();
-
-        if (repMembers.Any())
-        {
-            sb.AppendLine($"{memberIndent}// Members");
-            foreach (var member in repMembers.OrderBy(m => m.DeclarationOrder))
-            {
-                // Get types for this slot
-                if (!memberMap.TryGetValue(member.DeclarationOrder, out var typeVariations) ||
-                    typeVariations.Count != instantiations.Count)
-                {
-                    sb.AppendLine($"{memberIndent}// Error: Member alignment mismatch for {member.Name}");
-                    continue;
-                }
-
-                string finalType = ResolveGenericType(typeVariations, instantiations, genericParams);
-
-                string comment = "";
-                if (member.BitFieldWidth.HasValue) comment = $" // : {member.BitFieldWidth.Value}";
-
-                string memberName = PrimitiveTypeMappings.SanitizeIdentifier(member.Name);
-                sb.AppendLine($"{memberIndent}public {finalType} {memberName};{comment}");
-            }
-        }
-
-        // Methods?
-        sb.AppendLine();
-        sb.AppendLine($"{memberIndent}// Methods (Generic)");
-        // TODO: Genericize methods. For now we skip to avoid broken bindings.
-
-        sb.AppendLine($"{indent}}}");
-    }
-
-    private string ResolveGenericType(List<string> variations, List<TypeModel> instantiations,
-        List<(string Name, int Position)> genericParams)
-    {
-        // Check matches against template args first
-        // If it matches a template arg across all instantiations, we treat it as generic
-        // This handles both varying cases (T0=int, T0=float) and single-instance cases (T0=int)
-        // Note: For single instances, this might misidentify non-generic members as generic if types collide
-        foreach (var (name, position) in genericParams)
-        {
-            bool match = true;
-            bool ptrMatch = true;
-
-            for (int i = 0; i < instantiations.Count; i++)
-            {
-                // Get the concrete type of T{k} for this instance
-                string concreteT = instantiations[i].TemplateArguments.FirstOrDefault(t => t.Position == position)
-                    ?.TypeString ?? "";
-
-                if (string.IsNullOrEmpty(concreteT))
-                {
-                    match = false;
-                    ptrMatch = false;
-                    continue;
-                }
-
-                if (variations[i] != concreteT) match = false;
-                if (variations[i] != concreteT + "*") ptrMatch = false; // Simple pointer check
-            }
-
-            if (match) return name;
-            if (ptrMatch) return name + "*";
-        }
-
-        // Check if all same (constant across all instantiations)
-        if (variations.Distinct().Count() == 1)
-        {
-            return PrimitiveTypeMappings.MapType(variations[0]);
-        }
-
-        // Fallback for unmapped varying types
-        return "void*";
     }
 
     private Dictionary<string, TypeModel> GetDirectBaseTypes(TypeModel type)
@@ -436,6 +343,12 @@ public class CSharpBindingsGenerator
     {
         if (type == null) return "ACBindings.Unknown";
 
+        // For generic types, we must use the flattened name logic provided by MapType
+        if (type.IsGeneric)
+        {
+            return PrimitiveTypeMappings.MapType(type.NameWithTemplates);
+        }
+
         string ns = type.Namespace ?? string.Empty;
         string baseName = PrimitiveTypeMappings.CleanTypeName(type.BaseName ?? "Unknown").Replace("::", ".");
         string fqn;
@@ -448,7 +361,7 @@ public class CSharpBindingsGenerator
         return $"ACBindings.{fqn}";
     }
 
-    // Returns methods directly defined on this type (not inherited)
+// Returns methods directly defined on this type (not inherited)
     private List<(FunctionBodyModel Method, TypeModel SourceType)> GetAllMethods(TypeModel type,
         Dictionary<string, TypeModel> _)
     {
@@ -674,7 +587,7 @@ public class CSharpBindingsGenerator
     }
 
     private void GenerateMethod(FunctionBodyModel fb, TypeModel sourceType, TypeModel currentType,
-        System.Text.StringBuilder sb,
+        string currentStructName, System.Text.StringBuilder sb,
         int indentLevel)
     {
         string indent = new string(' ', indentLevel * 4);

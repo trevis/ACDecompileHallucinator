@@ -153,16 +153,20 @@ public class CSharpBindingsGeneratorTests
         var output = _generator.GenerateWithNamespace(types);
         _testOutput.WriteLine(output);
 
-        // Verify we get a single generic definition
-        Assert.Contains("public unsafe struct SmartArray<T0>", output);
+        // Verify we get specialized definitions
+        Assert.Contains("public unsafe struct SmartArray__int", output);
+        Assert.Contains("public unsafe struct SmartArray__float", output);
 
-        // Verify members use generic parameters
-        Assert.Contains("public T0* m_data;", output);
+        // Verify members use specialized types
+        // For SmartArray__int
+        Assert.Contains("public int* m_data;", output);
+        // For SmartArray__float
+        Assert.Contains("public float* m_data;", output);
+
         Assert.Contains("public int m_size;", output);
 
-        // Verify we DON'T get individual definitions
-        // Assert.DoesNotContain("public unsafe struct SmartArray ", output); 
-        // Logic: GenerateWithNamespace should prioritize generics and output only one struct
+        // Verify we DON'T get generic definitions
+        Assert.DoesNotContain("public unsafe struct SmartArray<", output);
     }
 
     [Fact]
@@ -211,13 +215,17 @@ public class CSharpBindingsGeneratorTests
         var output = _generator.GenerateWithNamespace(types);
         _testOutput.WriteLine(output);
 
-        // Verify we get a single generic definition with ONLY T0
-        // T1 (index 1) which matches "5" should be excluded
-        Assert.Contains("public unsafe struct SmartArrayLiteral<T0>", output);
-        Assert.DoesNotContain("public unsafe struct SmartArrayLiteral<T0, T1>", output);
+        // Verify we get specialized definitions including literals
+        // NOTE: Literals are now skipped in the naming
+        Assert.Contains("public unsafe struct SmartArrayLiteral__int", output);
+        Assert.Contains("public unsafe struct SmartArrayLiteral__float", output);
 
-        // Verify members use generic parameters
-        Assert.Contains("public T0* m_data;", output);
+        // Verify members
+        Assert.Contains("public int* m_data;", output);
+        Assert.Contains("public float* m_data;", output);
+
+        // Verify we DON'T get generic definitions
+        Assert.DoesNotContain("public unsafe struct SmartArrayLiteral<", output);
     }
 
     [Fact]
@@ -370,6 +378,7 @@ public class CSharpBindingsGeneratorTests
         // Static variable renaming
         Assert.Contains("public static int* using_ = (int*)0x12345678;", output);
     }
+
     [Fact]
     public void Test_FunctionPointerDoublePointerParameter()
     {
@@ -380,21 +389,21 @@ public class CSharpBindingsGeneratorTests
             BaseName = "UIOption_Menu",
             Type = TypeType.Struct,
             FunctionBodies = new List<FunctionBodyModel>
-        {
-            new()
             {
-                Id = 101,
-                FullyQualifiedName = "UIOption_Menu::SetUIPreference",
-                FunctionSignature = new FunctionSignatureModel
+                new()
                 {
-                    ReturnType = "void",
-                    CallingConvention = "Thiscall",
-                    Parameters = FunctionParamParser.ParseFunctionParameters(
-                        "UIOption *this, bool (__cdecl **tableID)()")
-                },
-                Offset = 0x00484740
+                    Id = 101,
+                    FullyQualifiedName = "UIOption_Menu::SetUIPreference",
+                    FunctionSignature = new FunctionSignatureModel
+                    {
+                        ReturnType = "void",
+                        CallingConvention = "Thiscall",
+                        Parameters = FunctionParamParser.ParseFunctionParameters(
+                            "UIOption *this, bool (__cdecl **tableID)()")
+                    },
+                    Offset = 0x00484740
+                }
             }
-        }
         };
 
         // Act
@@ -407,5 +416,137 @@ public class CSharpBindingsGeneratorTests
         // (Note: bool is mapped to byte in ACBindings)
         Assert.Contains("delegate* unmanaged[Cdecl]<byte>* tableID", output);
         Assert.DoesNotContain("bool (__cdecl**tableID)()", output);
+    }
+
+    [Fact]
+    public void Test_Duplicate_Types_Deduplication()
+    {
+        // Define two types that map to the same flattened name
+        var types = new List<TypeModel>
+        {
+            new()
+            {
+                Id = 1,
+                BaseName = "HashSet",
+                Namespace = "ACBindings",
+                Type = TypeType.Struct,
+                TemplateArguments = new List<TypeTemplateArgument>
+                {
+                    new() { Position = 0, TypeString = "unsigned int" }
+                }
+            },
+            new()
+            {
+                Id = 2,
+                BaseName = "HashSet",
+                Namespace = "ACBindings",
+                Type = TypeType.Struct,
+                TemplateArguments = new List<TypeTemplateArgument>
+                {
+                    new() { Position = 0, TypeString = "uint" } // Maps to same as unsigned int
+                }
+            }
+        };
+
+        var output = _generator.GenerateWithNamespace(types);
+        _testOutput.WriteLine(output);
+
+        // Should appear only once
+        int count = System.Text.RegularExpressions.Regex.Matches(output, "public unsafe struct HashSet__uint").Count;
+        Assert.Equal(1, count);
+    }
+
+    [Fact]
+    public void Test_Flattened_Method_Delegate_Signature()
+    {
+        // Define a generic type with a method
+        var type = new TypeModel
+        {
+            Id = 1,
+            BaseName = "HashSet",
+            Namespace = "ACBindings",
+            Type = TypeType.Struct,
+            TemplateArguments = new List<TypeTemplateArgument>
+            {
+                new() { Position = 0, TypeString = "uint" }
+            },
+            FunctionBodies = new List<FunctionBodyModel>
+            {
+                new()
+                {
+                    Id = 101,
+                    FullyQualifiedName = "HashSet<uint>::add",
+                    FunctionSignature = new FunctionSignatureModel
+                    {
+                        ReturnType = "void",
+                        CallingConvention = "Thiscall",
+                        Parameters = new List<FunctionParamModel>
+                        {
+                            new() { Name = "this", ParameterType = "HashSet<uint>*", Position = 0 },
+                            new() { Name = "val", ParameterType = "uint", Position = 1 }
+                        }
+                    },
+                    Offset = 0x00414D80
+                }
+            }
+        };
+
+        var output = _generator.Generate(type);
+        _testOutput.WriteLine(output);
+
+        // Verify the delegate signature uses the flattened name for 'this'
+        // Incorrect: delegate* unmanaged[Thiscall]<ref ACBindings.HashSet, ...>
+        // Correct: delegate* unmanaged[Thiscall]<ref ACBindings.HashSet__uint, uint, void>
+        Assert.Contains("delegate* unmanaged[Thiscall]<ref ACBindings.HashSet__uint, uint, void>", output);
+    }
+
+    [Fact]
+    public void Test_Duplicate_Nested_Types_Deduplication()
+    {
+        // Define a parent type with two nested types that flatten to the SAME name
+        var nested1 = new TypeModel
+        {
+            Id = 2,
+            BaseName = "NestedStruct",
+            Namespace = "ACBindings.Parents",
+            Type = TypeType.Struct,
+            // Uses numeric literal '1'
+            TemplateArguments = new List<TypeTemplateArgument>
+            {
+                new() { Position = 0, TypeString = "int" },
+                new() { Position = 1, TypeString = "1" }
+            }
+        };
+
+        var nested2 = new TypeModel
+        {
+            Id = 3,
+            BaseName = "NestedStruct",
+            Namespace = "ACBindings.Parents",
+            Type = TypeType.Struct,
+            // Uses numeric literal '2' -> Flattens to same "NestedStruct__int"
+            TemplateArguments = new List<TypeTemplateArgument>
+            {
+                new() { Position = 0, TypeString = "int" },
+                new() { Position = 1, TypeString = "2" }
+            }
+        };
+
+        var parent = new TypeModel
+        {
+            Id = 1,
+            BaseName = "ParentStruct",
+            Namespace = "ACBindings",
+            Type = TypeType.Struct,
+            NestedTypes = new List<TypeModel> { nested1, nested2 }
+        };
+
+        var output = _generator.Generate(parent);
+        _testOutput.WriteLine(output);
+
+        // Should only contain ONE definition of NestedStruct__int
+        int count = System.Text.RegularExpressions.Regex.Matches(output, "public unsafe struct NestedStruct__int")
+            .Count;
+        Assert.Equal(1, count);
     }
 }

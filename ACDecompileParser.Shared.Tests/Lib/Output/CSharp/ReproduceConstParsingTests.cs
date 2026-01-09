@@ -42,10 +42,8 @@ public class ReproduceConstParsingTests
         var output = _generator.Generate(type);
         _testOutput.WriteLine(output);
 
-        // Verify the fix
-        // We expect ACBindings.DArray<ACBindings.LIGHTOBJ*> or similar valid C#
-        // Definitely NOT const inside generics
+        // Verify
         Assert.DoesNotContain("const", output);
-        Assert.Contains("public ACBindings.DArray<Ptr<ACBindings.LIGHTOBJ>> light_list;", output);
+        Assert.Contains("public ACBindings.DArray__LIGHTOBJ_ptr light_list;", output);
     }
 }
