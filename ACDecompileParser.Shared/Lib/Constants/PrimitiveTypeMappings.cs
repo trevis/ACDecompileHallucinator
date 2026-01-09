@@ -97,7 +97,7 @@ public static class PrimitiveTypeMappings
         { "IDClass<_tagVersionHandle,32,0>", "uint" },
         { "void*", "System.IntPtr" },
         { "_DWORD", "int" },
-        { "HRESULT", "int" }
+        { "HRESULT", "int" },
     };
 
     /// <summary>

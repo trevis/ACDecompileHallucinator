@@ -1,7 +1,7 @@
 using ACDecompileParser.Shared.Lib.Constants;
 using ACDecompileParser.Shared.Lib.Models;
 using ACDecompileParser.Shared.Lib.Storage;
-using System.Runtime.CompilerServices;
+using ACDecompileParser.Shared.Lib.Services;
 
 namespace ACDecompileParser.Shared.Lib.Output.CSharp;
 
@@ -11,10 +11,18 @@ namespace ACDecompileParser.Shared.Lib.Output.CSharp;
 public class CSharpBindingsGenerator
 {
     private readonly ITypeRepository? _repository;
+    private readonly OffsetCalculationService? _offsetService;
 
-    public CSharpBindingsGenerator(ITypeRepository? repository = null)
+    public CSharpBindingsGenerator(ITypeRepository? repository = null, OffsetCalculationService? offsetService = null)
     {
         _repository = repository;
+        _offsetService = offsetService;
+
+        // If repository is available but service is not, create one locally
+        if (_offsetService == null && _repository != null)
+        {
+            _offsetService = new OffsetCalculationService(_repository);
+        }
     }
 
     /// <summary>
@@ -434,7 +442,10 @@ public class CSharpBindingsGenerator
 
         foreach (var p in parameters)
         {
-            string csType = PrimitiveTypeMappings.MapType(p.ParameterType ?? "void", p.TypeReference);
+            string csType = p.IsFunctionPointerType && p.NestedFunctionSignature != null
+                ? MapFunctionPointerToCSharp(p)
+                : PrimitiveTypeMappings.MapType(p.ParameterType ?? "void", p.TypeReference);
+
             string pName = SanitizeParameterName(p.Name);
             csParams.Add($"{csType} {pName}");
             callArgs.Add(pName);
@@ -585,9 +596,33 @@ public class CSharpBindingsGenerator
                     }
                     else
                     {
-                        // Array of structs: public fixed byte name_Raw[Size * sizeof(T)];
+                        // Array of structs: public fixed byte name_Raw[Size * HardcodedSize];
                         string baseTypeFqn = PrimitiveTypeMappings.MapType(member.TypeString ?? "void", tr);
-                        sb.AppendLine($"{indent}public fixed byte {rawFieldName}[{size} * sizeof({baseTypeFqn})];");
+
+                        // Try to get hardcoded size using OffsetCalculationService
+                        int elementSize = 0;
+                        if (_offsetService != null && tr.ReferencedTypeId.HasValue)
+                        {
+                            // If we have a resolved type ID, use it directly
+                            // We need to fetch the type model first as CalculateTypeSize requires it
+                            var referencedType = _repository?.GetTypeById(tr.ReferencedTypeId.Value);
+                            if (referencedType != null)
+                            {
+                                elementSize = _offsetService.CalculateTypeSize(referencedType);
+                            }
+                        }
+
+                        if (elementSize > 0)
+                        {
+                            // Use hardcoded size: public fixed byte name_Raw[Size * elementSize];
+                            sb.AppendLine($"{indent}public fixed byte {rawFieldName}[{size * elementSize}];");
+                        }
+                        else
+                        {
+                            // Fallback to sizeof: public fixed byte name_Raw[Size * sizeof(T)];
+                            sb.AppendLine($"{indent}public fixed byte {rawFieldName}[{size} * sizeof({baseTypeFqn})];");
+                        }
+
                         // Helper: public T* name => (T*)System.Runtime.CompilerServices.Unsafe.AsPointer(ref name_Raw[0]);
                         sb.AppendLine(
                             $"{indent}public {baseTypeFqn}* {propertyName} => ({baseTypeFqn}*)System.Runtime.CompilerServices.Unsafe.AsPointer(ref {rawFieldName}[0]);");
@@ -744,42 +779,6 @@ public class CSharpBindingsGenerator
             // If `__cdecl`, `isStatic` is true. `Render` has `public static int Set3DView`.
             // `ACRender` wrapper: `public int Set3DView(...) => Render.Set3DView(...)`.
             // BUT user prompt: `BaseClass_Render.Set3DView(x, y)` where `BaseClass_Render` is the base class field.
-            // This implies `Set3DView` in `Render` is treated as specific to that base instance or user made a typo/simplification.
-            // OR `Set3DView` is `__thiscall`?
-            // Example: `int __cdecl Render::Set3DView(int x, int y)`. Definitely static-ish (no this).
-            // Generated `Render` struct: `public static int Set3DView(...)`.
-            // `ACRender` struct: `public int Set3DView(...)`.
-            // If I generate `public int Set3DView` (instance) in `ACRender`, and it calls `Render.Set3DView`, that works.
-            // Converting static to instance seems weird but maybe desired?
-            // The user example: `public int Set3DView(int x, int y)`. (No static keyword).
-            // So pulled up methods are wrappers?
-
-            // I will generate as static if source is static, and call SourceType.Method.
-            // UNLESS user explicitly wants instance wrappers for statics?
-            // User: "I want to pull vtable methods from the class / base classes up to method definitions... When calling __thiscall methods..."
-            // This focuses on vtables/thiscall.
-            // `Set3DView` in example is not `__thiscall`? `int __cdecl Render::Set3DView`.
-            // User output: `public static int Set3DView` in `Render`. 
-            // AND `public int Set3DView` in `ACRender`.
-            // So `Render` has static, `ACRender` has instance?
-            // Calling static method `Render.Set3DView` is checking global state probably.
-            // Why `ACRender` wrapper is instance?
-            // Maybe to look like `ACRender::Set3DView`.
-            // I will generate static wrapper if it's static.
-            // `public static int Set3DView(...) => Render.Set3DView(...)`.
-            // User example line: `public int Set3DView(int x, int y) => BaseClass_Render.Set3DView(x, y);`
-            // If `BaseClass_Render` is the TYPE NAME, then it works.
-            // But the field name is `BaseClass_Render`. Type name is `Render`.
-            // If field and type have different names (e.g. `BaseClass_Render` field of type `Render`), `BaseClass_Render.Set3DView` calls method on field.
-            // Only valid if method is instance.
-            // So it seems `Set3DView` in `Render` is instance?
-            // But existing code: `isStatic = callingConv != "Thiscall"`. `__cdecl` is NOT `Thiscall`. So it is static.
-            // Contradiction in user example vs existing logic?
-            // Or maybe user example `Set3DView` is NOT `__cdecl`?
-            // Sample: `int __cdecl Render::Set3DView(int x, int y)`.
-            // User Output Expected: `public static int Set3DView(int x, int y)`.
-            // Wait, user output for `Render` has `public static int Set3DView`.
-            // User output for `ACRender` has `public int Set3DView(...) => BaseClass_Render.Set3DView(...)`.
             // If `BaseClass_Render` refers to the FIELD, you cannot call a static method on it in C#.
             // You must call `Render.Set3DView`.
             // Maybe user made a mistake in the example and meant `Render.Set3DView`?
@@ -787,21 +786,25 @@ public class CSharpBindingsGenerator
             // I will assume `Render.Set3DView` is the intent for static methods.
             // So: `public static int Set3DView(...) => SourceType.Set3DView(...)`.
 
-            sb.Append($"{indent}public static {returnType} {methodName}({paramsStr}) => ");
-            sb.AppendLine($"{GetFullyQualifiedName(sourceType)}.{methodName}({callArgsStr});");
+            string line =
+                $"{indent}public static {returnType} {methodName}({paramsStr}) => {GetFullyQualifiedName(sourceType)}.{methodName}({callArgsStr});";
+            AppendLineCheckForUserPurge(sb, line);
         }
         else
         {
+            string line;
             if (returnType == "void")
             {
-                sb.AppendLine(
-                    $"{indent}public static void {methodName}({paramsStr}) => ((delegate* unmanaged[{callingConv}]<{delegateTypesStr}>){offset})({callArgsStr});");
+                line =
+                    $"{indent}public static void {methodName}({paramsStr}) => ((delegate* unmanaged[{callingConv}]<{delegateTypesStr}>){offset})({callArgsStr});";
             }
             else
             {
-                sb.AppendLine(
-                    $"{indent}public static {returnType} {methodName}({paramsStr}) => ((delegate* unmanaged[{callingConv}]<{delegateTypesStr}>){offset})({callArgsStr});");
+                line =
+                    $"{indent}public static {returnType} {methodName}({paramsStr}) => ((delegate* unmanaged[{callingConv}]<{delegateTypesStr}>){offset})({callArgsStr});";
             }
+
+            AppendLineCheckForUserPurge(sb, line);
         }
     }
 
@@ -846,26 +849,35 @@ public class CSharpBindingsGenerator
         {
             // Pulled up instance method
             // Wrapper calling base field
-            // public int Method(...) => BaseClass_Source.Method(...)
-
-            // Adjust call args: remove "ref this" from callArgsStr, because it's passed implicitly or handled by syntax?
-            // "BaseClass_Source.Method(args)". 
-            // The generated method on Source signature is `Method(args)`.
-            // So we just pass forwarded args.
 
             // Rebuild call args for the wrapper call (excluding implicit this)
             var wrapperCallArgs = callArgs.Skip(1); // Skip "ref this"
             string wrapperCallArgsStr = string.Join(", ", wrapperCallArgs);
 
-            sb.Append($"{indent}public {returnType} {methodName}({paramsStr}) => ");
             // Base Class Field Name - Must match convention in GenerateStruct using FQN
             string baseField = $"BaseClass_{sourceType.FullyQualifiedName.Replace("::", ".").Replace(".", "_")}";
-            sb.AppendLine($"{baseField}.{methodName}({wrapperCallArgsStr});");
+
+            string line =
+                $"{indent}public {returnType} {methodName}({paramsStr}) => {baseField}.{methodName}({wrapperCallArgsStr});";
+            AppendLineCheckForUserPurge(sb, line);
         }
         else
         {
-            sb.AppendLine(
-                $"{indent}public {returnType} {methodName}({paramsStr}) => ((delegate* unmanaged[Thiscall]<{delegateTypesStr}>){offset})({callArgsStr});");
+            string line =
+                $"{indent}public {returnType} {methodName}({paramsStr}) => ((delegate* unmanaged[Thiscall]<{delegateTypesStr}>){offset})({callArgsStr});";
+            AppendLineCheckForUserPurge(sb, line);
+        }
+    }
+
+    private void AppendLineCheckForUserPurge(System.Text.StringBuilder sb, string line)
+    {
+        if (line.Contains("__userpurge"))
+        {
+            sb.AppendLine("// " + line);
+        }
+        else
+        {
+            sb.AppendLine(line);
         }
     }
 
