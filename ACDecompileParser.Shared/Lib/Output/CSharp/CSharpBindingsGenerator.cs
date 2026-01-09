@@ -158,7 +158,7 @@ public class CSharpBindingsGenerator
 
         // Check for destructor in hierarchy for IDisposable
         bool hasDestructor = HasDestructorInHierarchy(type);
-        string interfaces = hasDestructor ? " : System.IDisposable" : "";
+        string interfaces = (hasDestructor && !type.IsGeneric) ? " : System.IDisposable" : "";
 
         // Struct declaration
         string safeBaseName = GetGeneratedTypeName(type);
@@ -257,27 +257,30 @@ public class CSharpBindingsGenerator
         var functionBodies = type.FunctionBodies ??
                              _repository?.GetFunctionBodiesForType(type.Id).ToList() ?? new List<FunctionBodyModel>();
 
-        // Generated Constructors
-        var constructors = functionBodies.Where(fb => IsConstructor(fb, type.BaseName)).ToList();
-        if (constructors.Any())
+        if (!type.IsGeneric)
         {
-            if (hasContent) sb.AppendLine();
-            sb.AppendLine($"{memberIndent}// Generated Constructor");
-            foreach (var ctor in constructors)
+            // Generated Constructors
+            var constructors = functionBodies.Where(fb => IsConstructor(fb, type.BaseName)).ToList();
+            if (constructors.Any())
             {
-                GenerateCSharpConstructor(ctor, safeBaseName, sb, indentLevel + 1);
+                if (hasContent) sb.AppendLine();
+                sb.AppendLine($"{memberIndent}// Generated Constructor");
+                foreach (var ctor in constructors)
+                {
+                    GenerateCSharpConstructor(ctor, safeBaseName, sb, indentLevel + 1);
+                }
+
+                hasContent = true;
             }
 
-            hasContent = true;
-        }
-
-        // Generated Dispose
-        if (hasDestructor)
-        {
-            if (hasContent) sb.AppendLine();
-            sb.AppendLine($"{memberIndent}// Generated Dispose");
-            GenerateDispose(type, functionBodies, baseTypeMap, sb, indentLevel + 1);
-            hasContent = true;
+            // Generated Dispose
+            if (hasDestructor)
+            {
+                if (hasContent) sb.AppendLine();
+                sb.AppendLine($"{memberIndent}// Generated Dispose");
+                GenerateDispose(type, functionBodies, baseTypeMap, sb, indentLevel + 1);
+                hasContent = true;
+            }
         }
 
         if (hasContent) sb.AppendLine();
@@ -659,6 +662,13 @@ public class CSharpBindingsGenerator
     {
         string indent = new string(' ', indentLevel * 4);
 
+        // Comment out methods that belong to template types
+        if (sourceType.IsGeneric)
+        {
+            sb.AppendLine($"{indent}// {fb.FullyQualifiedName} (template type method)");
+            return;
+        }
+
         var sig = fb.FunctionSignature;
         if (sig == null)
         {
@@ -685,6 +695,12 @@ public class CSharpBindingsGenerator
 
         // Get parameters
         var parameters = sig.Parameters?.OrderBy(p => p.Position).ToList() ?? new List<FunctionParamModel>();
+
+        // Add original signature as a comment
+        if (!string.IsNullOrEmpty(sig.FullyQualifiedName))
+        {
+            sb.AppendLine($"{indent}// {sig.FullyQualifiedName}");
+        }
 
         // Determine if this is a static or instance method
         bool isStatic = !callingConv.Equals("Thiscall", StringComparison.OrdinalIgnoreCase);

@@ -63,7 +63,8 @@ public static class IgnoreFilter
         "_tagDataID", "_tag", "_tagVersionHandle", "_tagCellID", "tagPOINT", "CEmoteTable",
         "tagRECT", "_D3DPOOL", "_D3DFORMAT", "tWAVEFORMATEX", "IOptionChangeHandler",
         "_PUBLICKEYSTRUC", "_SECURITY_DESCRIPTOR", "_RTL_CRITICAL_SECTION", "_MMCKINFO",
-        "CBaseQualities", "CBaseQualities_vtbl", "CBasePiece", "tagBLOB"
+        "CBaseQualities", "CBaseQualities_vtbl", "CBasePiece", "tagBLOB", "IObjectFactory",
+        "_D3DLIGHT9", "_D3DLIGHTTYPE", "_D3DCOLORVALUE", "_D3DVECTOR"
     };
 
     /// <summary>

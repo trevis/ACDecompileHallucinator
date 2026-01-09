@@ -81,7 +81,7 @@ public static class PrimitiveTypeMappings
 
 // Other
         { "void", "void" },
-        { "wchar_t", "char" }, // C# char is 16-bit Unicode
+        { "wchar_t", "System.Char" }, // C# char is 16-bit Unicode
         { "WCHAR", "char" },
         { "char16_t", "char" },
         { "char32_t", "uint" },
@@ -576,6 +576,7 @@ public static class PrimitiveTypeMappings
     /// </summary>
     public static string SanitizeIdentifier(string? name)
     {
+        name = name?.Replace("~", "Destructor");
         if (string.IsNullOrEmpty(name))
             return "_param";
 
