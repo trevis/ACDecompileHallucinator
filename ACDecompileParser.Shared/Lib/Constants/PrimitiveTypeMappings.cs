@@ -93,8 +93,6 @@ public static class PrimitiveTypeMappings
         { "uintptr_t", "nuint" },
         { "DWORD_PTR", "nuint" },
 
-        { "IDClass<_tagDataID,32,0>", "uint" },
-        { "IDClass<_tagVersionHandle,32,0>", "uint" },
         { "void*", "System.IntPtr" },
         { "_DWORD", "int" },
         { "HRESULT", "int" },
@@ -108,7 +106,7 @@ public static class PrimitiveTypeMappings
         { "LPCSTR", "sbyte*" },
         { "_iobuf", "byte" },
         { "_IDClass", "uint" },
-        { "_InstanceID", "ulong" }
+        { "_D3DPSHADERCAPS2_0", "_D3DVSHADERCAPS2_0" }
 
     };
 

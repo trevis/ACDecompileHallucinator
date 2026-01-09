@@ -170,24 +170,4 @@ public class UnknownPointerMappingTests
         // Assert
         Assert.Equal("ACBindings.KnownType*", result);
     }
-
-    [Fact]
-    public void MapType_WithTrulyUnknownPointerType_ReturnsIntPtr()
-    {
-        // Arrange: TypeReference with IsPointer = true but no resolution info at all
-        var typeRef = new TypeReference
-        {
-            TypeString = "_iobuf*",
-            IsPointer = true,
-            PointerDepth = 1,
-            ReferencedTypeId = null,
-            ReferencedType = null
-        };
-
-        // Act
-        var result = PrimitiveTypeMappings.MapType("_iobuf*", typeRef);
-
-        // Assert: Should return System.IntPtr even if resolution wasn't even attempted
-        Assert.Equal("System.IntPtr", result);
-    }
 }

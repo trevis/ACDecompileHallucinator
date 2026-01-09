@@ -49,7 +49,8 @@ public static class IgnoreFilter
         "CDispParams", "CDynamicOutputPin", "CEnum", "CMedia", "CBasicAudio", "CGenericList",
         "CHid", "CMemAllocator", "CPosPassThru", "CRendererPosPassThru", "CSourceSeeking",
         "FT", "InteractiveOutputHandler", "LogTextTypeEnumMapper", "LookFile", "ProjectSettings",
-        "Resource", "UDATE", "CRendererInputPin", "CTextureRenderer", "CCmdQueue", "CSourcePosition"
+        "Resource", "UDATE", "CRendererInputPin", "CTextureRenderer", "CCmdQueue", "CSourcePosition",
+        "SerializationBehavior"
     };
 
     public static readonly HashSet<string> IgnoreSuffixes = new HashSet<string>
@@ -65,7 +66,9 @@ public static class IgnoreFilter
         "_PUBLICKEYSTRUC", "_SECURITY_DESCRIPTOR", "_RTL_CRITICAL_SECTION", "_MMCKINFO",
         "CBaseQualities", "CBaseQualities_vtbl", "CBasePiece", "tagBLOB", "IObjectFactory",
         "_D3DLIGHT9", "_D3DLIGHTTYPE", "_D3DCOLORVALUE", "_D3DVECTOR", "ICIDM", "ICIDM_vtbl",
-        "IResourceNotify", "_WSABUF", "SCARD_T0_COMMAND", "HIDREPORTINFO", "_D3DMATERIAL9"
+        "IResourceNotify", "_WSABUF", "SCARD_T0_COMMAND", "HIDREPORTINFO", "_D3DMATERIAL9",
+        "_InstanceID", "_D3DMATRIX", "_D3DDEVTYPE", "_D3DCAPS9", "_D3DRESOURCETYPE",
+        "_D3DPRIMITIVETYPE", "_D3DVSHADERCAPS2_0", "IConsoleCallbackObject"
     };
 
     /// <summary>
