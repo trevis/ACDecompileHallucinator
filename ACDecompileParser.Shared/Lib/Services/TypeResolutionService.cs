@@ -1,4 +1,3 @@
-using System.Linq;
 using ACDecompileParser.Shared.Lib.Constants;
 using ACDecompileParser.Shared.Lib.Models;
 using ACDecompileParser.Shared.Lib.Storage;
@@ -637,9 +636,9 @@ public class TypeResolutionService
         var fqnLookup = new Dictionary<string, TypeModel>();
         foreach (var t in allTypes)
         {
-            if (!string.IsNullOrEmpty(t.FullyQualifiedName) && !fqnLookup.ContainsKey(t.FullyQualifiedName))
+            if (!string.IsNullOrEmpty(t.StoredFullyQualifiedName) && !fqnLookup.ContainsKey(t.StoredFullyQualifiedName))
             {
-                fqnLookup[t.FullyQualifiedName] = t;
+                fqnLookup[t.StoredFullyQualifiedName] = t;
             }
         }
 
@@ -688,10 +687,10 @@ public class TypeResolutionService
                 var rootParent = FindRootParent(parentType, fqnLookup, baseNameNamespaceLookup);
                 if (rootParent != null)
                 {
-                    return rootParent.FullyQualifiedName;
+                    return rootParent.StoredFullyQualifiedName;
                 }
 
-                return parentType.FullyQualifiedName;
+                return parentType.StoredFullyQualifiedName;
             }
         }
 
@@ -705,7 +704,7 @@ public class TypeResolutionService
                 var rootParent = FindRootParentFromNamespace(type.Namespace, fqnLookup, baseNameNamespaceLookup);
                 if (rootParent != null)
                 {
-                    return rootParent.FullyQualifiedName;
+                    return rootParent.StoredFullyQualifiedName;
                 }
             }
             else
@@ -714,7 +713,9 @@ public class TypeResolutionService
                 if (fqnLookup.TryGetValue(type.Namespace, out var parentType))
                 {
                     var rootParent = FindRootParent(parentType, fqnLookup, baseNameNamespaceLookup);
-                    return rootParent != null ? rootParent.FullyQualifiedName : parentType.FullyQualifiedName;
+                    return rootParent != null
+                        ? rootParent.StoredFullyQualifiedName
+                        : parentType.StoredFullyQualifiedName;
                 }
             }
         }
@@ -732,13 +733,13 @@ public class TypeResolutionService
                 // Look for the root type by fully qualified name
                 if (fqnLookup.TryGetValue(rootName, out var rootType))
                 {
-                    return rootType.FullyQualifiedName;
+                    return rootType.StoredFullyQualifiedName;
                 }
 
                 // If not found directly, try to find it by BaseName
                 if (baseNameNamespaceLookup.TryGetValue((rootName, string.Empty), out var rootTypeByName))
                 {
-                    return rootTypeByName.FullyQualifiedName;
+                    return rootTypeByName.StoredFullyQualifiedName;
                 }
             }
         }
@@ -754,7 +755,7 @@ public class TypeResolutionService
             if (fqnLookup.TryGetValue(type.Namespace, out var parentType))
             {
                 // This nested type should be grouped with its parent
-                return parentType.FullyQualifiedName;
+                return parentType.StoredFullyQualifiedName;
             }
 
             // If not found directly, try to find the parent by extracting the base name
@@ -763,16 +764,16 @@ public class TypeResolutionService
 
             if (baseNameNamespaceLookup.TryGetValue((parentBaseName, string.Empty), out var parentTypeByBaseName))
             {
-                // Check if this parent type's FullyQualifiedName matches the namespace
-                if (parentTypeByBaseName.FullyQualifiedName == type.Namespace)
+                // Check if this parent type's StoredFullyQualifiedName matches the namespace
+                if (parentTypeByBaseName.StoredFullyQualifiedName == type.Namespace)
                 {
-                    return parentTypeByBaseName.FullyQualifiedName;
+                    return parentTypeByBaseName.StoredFullyQualifiedName;
                 }
             }
         }
 
         // Default to the type's own fully qualified name
-        return type.FullyQualifiedName;
+        return type.StoredFullyQualifiedName;
     }
 
     private TypeModel? FindRootParent(TypeModel type,
@@ -784,7 +785,7 @@ public class TypeResolutionService
         // we want to find the root type AsyncCache
 
         string currentNamespace = type.Namespace;
-        string fullyQualifiedName = type.FullyQualifiedName;
+        string fullyQualifiedName = type.StoredFullyQualifiedName;
 
         // If the fully qualified name contains "::", extract the root
         if (fullyQualifiedName.Contains("::"))

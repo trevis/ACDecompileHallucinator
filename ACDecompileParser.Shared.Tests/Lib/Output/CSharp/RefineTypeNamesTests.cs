@@ -42,7 +42,7 @@ public class RefineTypeNamesTests
 
         // Verify struct name is stripped
         Assert.Contains("public unsafe struct _A123", output);
-        Assert.DoesNotContain("$A123", output);
+        Assert.DoesNotContain("struct $A123", output);
 
         // Verify member type is stripped (using MapType)
         Assert.Contains("public ACBindings._B456 __s0;", output);

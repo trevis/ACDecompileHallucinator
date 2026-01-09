@@ -204,17 +204,14 @@ public class TypeHierarchyService : ITypeHierarchyService
     /// </summary>
     public void LinkNestedTypes(List<TypeModel> types)
     {
-        // Build a dictionary for quick lookup by BaseName
-        var typesByBaseName = types.GroupBy(t => t.BaseName)
-            .ToDictionary(g => g.Key, g => g.ToList());
-
         foreach (var type in types)
         {
             // Find the root type for grouping using existing logic
             var rootType = FindRootTypeForGrouping(type, types);
 
             // If this type has a different root type and that root type exists, link them
-            if (rootType != null && rootType.Id != type.Id)
+            // BUT: Avoid linking if they have the same BaseName (likely different template instantiations)
+            if (rootType != null && rootType.Id != type.Id && type.BaseName != rootType.BaseName)
             {
                 // Set parent relationship
                 type.ParentType = rootType;

@@ -833,7 +833,7 @@ public class CSharpBindingsGenerator
         var callArgs = new List<string>();
 
         // Add ref this as first delegate parameter
-        delegateParams.Add($"ref {GetFullyQualifiedName(sourceType)}");
+        delegateParams.Add($"ref {GetFullyQualifiedName(currentType)}");
         callArgs.Add("ref this"); // Default for own
 
         // Skip first parameter if it's 'this'
