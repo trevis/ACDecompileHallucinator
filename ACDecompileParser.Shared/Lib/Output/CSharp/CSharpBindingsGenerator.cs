@@ -325,7 +325,8 @@ public class CSharpBindingsGenerator
                 string comment = "";
                 if (member.BitFieldWidth.HasValue) comment = $" // : {member.BitFieldWidth.Value}";
 
-                sb.AppendLine($"{memberIndent}public {finalType} {member.Name};{comment}");
+                string memberName = PrimitiveTypeMappings.SanitizeIdentifier(member.Name);
+                sb.AppendLine($"{memberIndent}public {finalType} {memberName};{comment}");
             }
         }
 
@@ -650,7 +651,8 @@ public class CSharpBindingsGenerator
         string csType = PrimitiveTypeMappings.MapTypeForStaticPointer(sv.TypeString, sv.TypeReference);
         string address = NormalizeAddress(sv.Address);
 
-        sb.AppendLine($"{indent}public static {csType} {sv.Name} = ({csType}){address};");
+        string svName = PrimitiveTypeMappings.SanitizeIdentifier(sv.Name);
+        sb.AppendLine($"{indent}public static {csType} {svName} = ({csType}){address};");
     }
 
     private void GenerateMember(StructMemberModel member, System.Text.StringBuilder sb, int indentLevel)
@@ -683,8 +685,9 @@ public class CSharpBindingsGenerator
                 string baseType = csType.TrimEnd('*');
                 if (IsPrimitiveForFixed(baseType))
                 {
+                    string memberName = PrimitiveTypeMappings.SanitizeIdentifier(member.Name);
                     sb.AppendLine(
-                        $"{indent}public fixed {baseType} {member.Name}[{member.TypeReference.ArraySize.Value}];");
+                        $"{indent}public fixed {baseType} {memberName}[{member.TypeReference.ArraySize.Value}];");
                     return;
                 }
 
@@ -711,7 +714,8 @@ public class CSharpBindingsGenerator
             comment = $" // : {member.BitFieldWidth.Value}";
         }
 
-        sb.AppendLine($"{indent}public {csType} {member.Name};{comment}");
+        string sanitizedName = PrimitiveTypeMappings.SanitizeIdentifier(member.Name);
+        sb.AppendLine($"{indent}public {csType} {sanitizedName};{comment}");
     }
 
     private void GenerateMethod(FunctionBodyModel fb, TypeModel sourceType, TypeModel currentType,
@@ -992,20 +996,7 @@ public class CSharpBindingsGenerator
 
     private static string SanitizeParameterName(string? name)
     {
-        if (string.IsNullOrEmpty(name))
-            return "_param";
-
-        // C# reserved keywords that might appear in decompiled code
-        var reserved = new HashSet<string> { "this", "base", "ref", "out", "in", "params", "class", "struct", "enum" };
-
-        if (reserved.Contains(name))
-            return "_" + name;
-
-        // Ensure valid identifier
-        if (!char.IsLetter(name[0]) && name[0] != '_')
-            return "_" + name;
-
-        return name;
+        return PrimitiveTypeMappings.SanitizeIdentifier(name);
     }
 
     private static bool IsThisParameter(FunctionParamModel param)

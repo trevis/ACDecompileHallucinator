@@ -95,7 +95,9 @@ public static class PrimitiveTypeMappings
 
         { "IDClass<_tagDataID,32,0>", "uint" },
         { "IDClass<_tagVersionHandle,32,0>", "uint" },
-        { "void*", "System.IntPtr" }
+        { "void*", "System.IntPtr" },
+        { "_DWORD", "int" },
+        { "HRESULT", "int" }
     };
 
     /// <summary>
@@ -115,7 +117,21 @@ public static class PrimitiveTypeMappings
     };
 
     /// <summary>
-    /// Maps a C++ type string to its C# equivalent.
+    /// Comprehensive list of C# reserved keywords.
+    /// </summary>
+    public static readonly HashSet<string> CSharpKeywords = new()
+    {
+        "abstract", "as", "base", "bool", "break", "byte", "case", "catch", "char", "checked",
+        "class", "const", "continue", "decimal", "default", "delegate", "do", "double", "else",
+        "enum", "event", "explicit", "extern", "false", "finally", "fixed", "float", "for",
+        "foreach", "goto", "if", "implicit", "in", "int", "interface", "internal", "is", "lock",
+        "long", "namespace", "new", "null", "object", "operator", "out", "override", "params",
+        "private", "protected", "public", "readonly", "ref", "return", "sbyte", "sealed",
+        "short", "sizeof", "stackalloc", "static", "string", "struct", "switch", "this", "throw",
+        "true", "try", "typeof", "uint", "ulong", "unchecked", "unsafe", "ushort", "using",
+        "virtual", "void", "volatile", "while"
+    };
+
     /// Handles pointers, arrays, and complex types.
     /// </summary>
     /// <param name="cppType">The C++ type string (may include pointers, const, etc.)</param>
@@ -460,5 +476,23 @@ public static class PrimitiveTypeMappings
         }
 
         return mappedType;
+    }
+
+    /// <summary>
+    /// Sanitizes an identifier (member or parameter name) by appending an underscore if it is a C# keyword.
+    /// </summary>
+    public static string SanitizeIdentifier(string? name)
+    {
+        if (string.IsNullOrEmpty(name))
+            return "_param";
+
+        if (CSharpKeywords.Contains(name))
+            return name + "_";
+
+        // Ensure valid identifier start (though C++ usually already does)
+        if (!char.IsLetter(name[0]) && name[0] != '_')
+            return "_" + name;
+
+        return name;
     }
 }
