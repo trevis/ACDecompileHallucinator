@@ -32,21 +32,15 @@ public class CSharpGroupProcessor
         if (types == null || !types.Any())
             return string.Empty;
 
-        var sw = System.Diagnostics.Stopwatch.StartNew();
-
         // Data is now pre-loaded in CSharpFileOutputGenerator, no need to query here!
         // The TypeModels already have BaseTypes, StructMembers, FunctionBodies, and StaticVariables attached
 
         // Link parent/child relationships for nested type output
-        sw.Restart();
         _hierarchyService.LinkNestedTypes(types);
-        var linkMs = sw.ElapsedMilliseconds;
 
-        string result;
-        sw.Restart();
         if (includeNamespace)
         {
-            result = _generator.GenerateWithNamespace(types);
+            return _generator.GenerateWithNamespace(types);
         }
         else
         {
@@ -56,14 +50,8 @@ public class CSharpGroupProcessor
                 sb.AppendLine(_generator.Generate(type));
             }
 
-            result = sb.ToString();
+            return sb.ToString();
         }
-
-        var genMs = sw.ElapsedMilliseconds;
-
-        Console.WriteLine($"  [CSharpGroupProcessor] Link: {linkMs}ms, Generate: {genMs}ms");
-
-        return result;
     }
 
     /// <summary>

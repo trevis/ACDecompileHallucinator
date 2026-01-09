@@ -105,7 +105,8 @@ public class CSharpFileOutputGenerator
                 }
             }
 
-            Console.WriteLine($"[Profiling] Bulk load static variables: {sw.ElapsedMilliseconds}ms");
+            Console.WriteLine(
+                $"[Profiling] Bulk load static variables: {sw.ElapsedMilliseconds}ms ({allStaticVariables.Count} types with statics)");
 
             // Attach ALL pre-loaded data to type models
             sw.Restart();

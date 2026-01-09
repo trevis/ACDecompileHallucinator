@@ -90,7 +90,7 @@ class Program
         var sourceFileContents = new List<string>();
         var filePaths = new List<string>();
         string outputDir = "./out/";
-        string staticsFile = "statics.txt";
+        string? staticsFile = null;
 
         for (int i = 0; i < args.Length; i++)
         {
@@ -141,6 +141,12 @@ class Program
             return;
         }
 
+        if (staticsFile != null && !File.Exists(staticsFile))
+        {
+            Console.WriteLine($"Error: Statics file '{staticsFile}' does not exist.");
+            return;
+        }
+
         if (!Directory.Exists(outputDir))
         {
             Directory.CreateDirectory(outputDir);
@@ -174,7 +180,7 @@ class Program
         repo.SaveChanges();
         Console.WriteLine("Database update completed (Resolution & Offsets).");
 
-        if (File.Exists(staticsFile))
+        if (staticsFile != null)
         {
             Console.WriteLine($"Parsing statics from {staticsFile}...");
             var statics = StaticsParser.ParseFile(staticsFile);

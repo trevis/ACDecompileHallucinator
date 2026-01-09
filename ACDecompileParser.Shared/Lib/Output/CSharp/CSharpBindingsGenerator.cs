@@ -407,37 +407,18 @@ public class CSharpBindingsGenerator
 
     private bool HasDestructorInHierarchy(TypeModel type)
     {
-        // Check self
-        if (type.FunctionBodies?.Any(fb => IsDestructor(fb, type.BaseName)) == true) return true;
-        if (_repository?.GetFunctionBodiesForType(type.Id)?.Any(fb => IsDestructor(fb, type.BaseName)) ==
-            true) return true;
+        // Only check this type's pre-loaded FunctionBodies - no database queries!
+        // FunctionBodies should already be loaded by CSharpFileOutputGenerator
+        if (type.FunctionBodies?.Any(fb => IsDestructor(fb, type.BaseName)) == true)
+            return true;
 
-        // Check bases
+        // Check bases recursively (using pre-loaded data only)
         var bases = type.BaseTypes ?? new List<TypeInheritance>();
         foreach (var bt in bases)
         {
-            // We need the TypeModel of the base
             var baseType = bt.RelatedType;
-            if (baseType == null && _repository != null)
-            {
-                // Try to resolve
-                // Simplification: Check by name or ID
-                if (bt.RelatedTypeId > 0)
-                {
-                    // Fallback: This might be slow recursively
-                    // Assuming mostly loaded or tests setup
-                    // For now, let's assume we can't easily check deep hierarchy without loading.
-                    // But requirement says "Structs with a destructor (defined themselves, or by a parent struct)".
-                    // If we can't find it, we can't check.
-                    // Let's rely on cached/provided models.
-                    // If verification fails, we can add explicit loading.
-                }
-            }
-
-            if (baseType != null)
-            {
-                if (HasDestructorInHierarchy(baseType)) return true;
-            }
+            if (baseType != null && HasDestructorInHierarchy(baseType))
+                return true;
         }
 
         return false;
@@ -459,23 +440,18 @@ public class CSharpBindingsGenerator
         return $"ACBindings.{fqn}";
     }
 
-    // Combined list of methods: Self methods + Unique Base methods
+    // Returns methods directly defined on this type (not inherited)
     private List<(FunctionBodyModel Method, TypeModel SourceType)> GetAllMethods(TypeModel type,
         Dictionary<string, TypeModel> baseMap)
     {
         var result = new List<(FunctionBodyModel, TypeModel)>();
         var signatures = new HashSet<string>();
 
-        // 1. Add own methods
+        // Only add methods directly defined on this type
         var ownBodies = type.FunctionBodies ??
                         _repository?.GetFunctionBodiesForType(type.Id).ToList() ?? new List<FunctionBodyModel>();
         foreach (var body in ownBodies)
         {
-            // Skip constructors/destructors in Method list? 
-            // NO, we want to generate them as renamed methods (_ConstructorInternal/_DestructorInternal)
-            // They are handled by renaming in GenerateMethod.
-            // if (IsConstructor(body, type.BaseName) || IsDestructor(body, type.BaseName)) continue;
-
             string sigKey = GetSignatureKey(body);
             if (!signatures.Contains(sigKey))
             {
@@ -484,34 +460,8 @@ public class CSharpBindingsGenerator
             }
         }
 
-        // 2. Add base methods (pulled up)
-        // We iterate through direct bases. For each base, we get ITS visible methods.
-        foreach (var basePair in baseMap)
-        {
-            string baseFieldName = basePair.Key;
-            TypeModel baseType = basePair.Value;
-
-            // Get all methods effectively exposed by the base
-            // Note: Re-calculating base's methods recursively
-            // To avoid infinite recursion or re-work, we can just recurse.
-            // Since hierarchies are shallow usually, this is OK.
-            // NOTE: We need to know who the IMMEDIATE base is for the call.
-            var baseMethods = GetAllMethods(baseType, GetDirectBaseTypes(baseType));
-
-            foreach (var (baseMethod, originalSource) in baseMethods)
-            {
-                string sigKey = GetSignatureKey(baseMethod);
-                if (!signatures.Contains(sigKey))
-                {
-                    // We pull this method up. 
-                    // The SourceType for the generator should be the IMMEDIATE base 
-                    // so we can generate "BaseClass_Immediate.Method()".
-                    // So we replace originalSource with baseType (Immediate Base).
-                    result.Add((baseMethod, baseType));
-                    signatures.Add(sigKey);
-                }
-            }
-        }
+        // Base methods are NOT pulled up - they stay in their own base class structs
+        // Users can access them via baseFieldInstance.Method() if needed
 
         return result;
     }
