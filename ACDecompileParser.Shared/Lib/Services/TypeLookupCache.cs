@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using ACDecompileParser.Shared.Lib.Storage;
 
 namespace ACDecompileParser.Shared.Lib.Services;
