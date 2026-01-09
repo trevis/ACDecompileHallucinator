@@ -227,6 +227,20 @@ public class MemberParserTests
         Assert.True(result.IsFunctionPointer);
         Assert.Null(result.Alignment);
     }
+    [Fact]
+    public void ParseMemberDeclaration_HandlesDecompilerComments()
+    {
+        // Arrange
+        var line = "/* 0x012 */ // local variable allocation has failed\nbool MyMember;";
+
+        // Act
+        var result = MemberParser.ParseMemberDeclaration(line);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal("MyMember", result.Name);
+        Assert.Equal("bool", result.TypeString);
+    }
 
     #endregion
 }
