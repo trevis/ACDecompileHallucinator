@@ -2,12 +2,12 @@
 @using ACDecompileParser.Shared.Lib.Models
 @using ACDecompileParser.Shared.Lib.Storage
 @using ACDecompileParser.Shared.Lib.Output
+@using ACTypeBrowser.Services
 @using Microsoft.AspNetCore.Components.Routing
 @using Microsoft.JSInterop
-@inject ITypeHierarchyService TypeHierarchyService
+@inject SidebarTreeCache TreeCache
 @inject ITypeRepository TypeRepository
 @inject HierarchyRuleEngine RuleEngine
-@inject HierarchyTreeBuilder TreeBuilder
 @inject NavigationManager NavigationManager
 @inject IJSRuntime JSRuntime
 @implements IDisposable
@@ -146,26 +146,19 @@
 
     private void LoadData()
     {
-        List<TypeModel> allTypes;
+        // Use cached tree from SidebarTreeCache for massive performance improvement
         if (string.IsNullOrWhiteSpace(SearchTerm))
         {
-            allTypes = TypeRepository.GetAllTypes(includeIgnored: false);
+            _rootNode = TreeCache.GetFullTree();
         }
         else
         {
-            allTypes = TypeRepository.SearchTypes(SearchTerm, includeIgnored: false);
-        }
-
-        // Filter out internal types starting with $
-        allTypes = allTypes.Where(t => !t.BaseName.StartsWith("$")).ToList();
-
-        var grouped = TypeHierarchyService.GroupTypesByBaseNameAndNamespace(allTypes, RuleEngine);
-        _rootNode = TreeBuilder.BuildTree(grouped);
-
-        // Auto-expand namespaces if searching
-        if (!string.IsNullOrWhiteSpace(SearchTerm))
-        {
-            AutoExpand(_rootNode);
+            _rootNode = TreeCache.SearchTree(SearchTerm);
+            // Auto-expand namespaces when searching
+            if (_rootNode != null)
+            {
+                AutoExpand(_rootNode);
+            }
         }
     }
 

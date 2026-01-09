@@ -134,4 +134,16 @@ public interface ITypeRepository : IDisposable
     int InsertStaticVariable(StaticVariableModel staticVariable);
     void InsertStaticVariables(IEnumerable<StaticVariableModel> staticVariables);
     List<StaticVariableModel> GetStaticVariablesForType(int typeId);
+
+    /// <summary>
+    /// Batch loads static variables for multiple types in a single query.
+    /// More efficient than calling GetStaticVariablesForType for each type individually.
+    /// </summary>
+    Dictionary<int, List<StaticVariableModel>> GetStaticVariablesForMultipleTypes(IEnumerable<int> typeIds);
+
+    /// <summary>
+    /// Batch loads enum members for multiple types in a single query.
+    /// More efficient than calling GetEnumMembers for each type individually.
+    /// </summary>
+    Dictionary<int, List<EnumMemberModel>> GetEnumMembersForMultipleTypes(IEnumerable<int> typeIds);
 }

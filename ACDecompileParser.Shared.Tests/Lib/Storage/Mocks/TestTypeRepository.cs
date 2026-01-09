@@ -523,4 +523,23 @@ public class TestTypeRepository : ITypeRepository
     {
         return _staticVariables.Where(sv => sv.ParentTypeId == typeId).ToList();
     }
+
+    public Dictionary<int, List<StaticVariableModel>> GetStaticVariablesForMultipleTypes(IEnumerable<int> typeIds)
+    {
+        var idSet = typeIds.ToHashSet();
+        return _staticVariables
+            .Where(sv => sv.ParentTypeId.HasValue && idSet.Contains(sv.ParentTypeId.Value))
+            .GroupBy(sv => sv.ParentTypeId!.Value)
+            .ToDictionary(g => g.Key, g => g.ToList());
+    }
+
+    public Dictionary<int, List<EnumMemberModel>> GetEnumMembersForMultipleTypes(IEnumerable<int> typeIds)
+    {
+        var idSet = typeIds.ToHashSet();
+        return _enumMembers
+            .Where(em => idSet.Contains(em.EnumTypeId))
+            .GroupBy(em => em.EnumTypeId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+    }
 }
+

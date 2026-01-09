@@ -15,15 +15,16 @@ public record TypeLookupEntry(int Id, string BaseName, string Namespace, string?
 /// </summary>
 public class TypeLookupCache
 {
-    private readonly ITypeRepository _repository;
+    private readonly IServiceScopeFactory _scopeFactory;
     private Dictionary<int, TypeLookupEntry>? _byId;
     private Dictionary<string, int>? _byFqn;
     private Dictionary<string, List<int>>? _byBaseName;
     private bool _isLoaded;
+    private readonly object _lock = new();
 
-    public TypeLookupCache(ITypeRepository repository)
+    public TypeLookupCache(IServiceScopeFactory scopeFactory)
     {
-        _repository = repository;
+        _scopeFactory = scopeFactory;
     }
 
     /// <summary>
@@ -34,28 +35,37 @@ public class TypeLookupCache
     {
         if (_isLoaded) return;
 
-        var data = _repository.GetTypeLookupData();
-        _byId = new Dictionary<int, TypeLookupEntry>();
-        _byFqn = new Dictionary<string, int>(StringComparer.Ordinal);
-        _byBaseName = new Dictionary<string, List<int>>(StringComparer.Ordinal);
-
-        foreach (var (id, baseName, ns, fqn) in data)
+        lock (_lock)
         {
-            var entry = new TypeLookupEntry(id, baseName, ns, fqn);
-            _byId[id] = entry;
+            if (_isLoaded) return;
 
-            if (!string.IsNullOrEmpty(fqn))
-                _byFqn[fqn] = id;
+            using var scope = _scopeFactory.CreateScope();
+            var repository = scope.ServiceProvider.GetRequiredService<ITypeRepository>();
 
-            if (!_byBaseName.TryGetValue(baseName, out var list))
+            var data = repository.GetTypeLookupData();
+            _byId = new Dictionary<int, TypeLookupEntry>();
+            _byFqn = new Dictionary<string, int>(StringComparer.Ordinal);
+            _byBaseName = new Dictionary<string, List<int>>(StringComparer.Ordinal);
+
+            foreach (var (id, baseName, ns, fqn) in data)
             {
-                list = new List<int>();
-                _byBaseName[baseName] = list;
-            }
-            list.Add(id);
-        }
+                var entry = new TypeLookupEntry(id, baseName, ns, fqn);
+                _byId[id] = entry;
 
-        _isLoaded = true;
+                if (!string.IsNullOrEmpty(fqn))
+                    _byFqn[fqn] = id;
+
+                if (!_byBaseName.TryGetValue(baseName, out var list))
+                {
+                    list = new List<int>();
+                    _byBaseName[baseName] = list;
+                }
+
+                list.Add(id);
+            }
+
+            _isLoaded = true;
+        }
     }
 
     /// <summary>

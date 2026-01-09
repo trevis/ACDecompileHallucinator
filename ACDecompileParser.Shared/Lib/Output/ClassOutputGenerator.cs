@@ -22,6 +22,16 @@ public class ClassOutputGenerator : TypeOutputGeneratorBase
         _memberGenerator = new MemberTokenGenerator(TokenizationService);
     }
 
+    /// <summary>
+    /// Override to propagate cache to nested generators for efficient type resolution.
+    /// </summary>
+    public new void SetLookupCache(TypeLookupCache cache)
+    {
+        base.SetLookupCache(cache);
+        _structGenerator.SetLookupCache(cache);
+        _memberGenerator.SetLookupCache(cache);
+    }
+
     public override IEnumerable<CodeToken> Generate(TypeModel type)
     {
         // If this type has a parent, it should be rendered by its parent's generator
@@ -225,13 +235,24 @@ public class ClassOutputGenerator : TypeOutputGeneratorBase
         }
 
 
+        // Pre-load enum members for all nested enums in a single batch query
+        Dictionary<int, List<EnumMemberModel>>? enumMembersCache = null;
+        var nestedEnumIds = (type.NestedTypes ?? new List<TypeModel>())
+            .Where(nt => nt.Type == TypeType.Enum)
+            .Select(nt => nt.Id)
+            .ToList();
+        if (nestedEnumIds.Any() && Repository != null)
+        {
+            enumMembersCache = Repository.GetEnumMembersForMultipleTypes(nestedEnumIds);
+        }
+
         // Output nested types (vtables first, already sorted by LinkNestedTypes)
         foreach (var nested in (type.NestedTypes ?? new List<TypeModel>()))
         {
             if (nested.Type == TypeType.Enum)
             {
-                // Output enum
-                foreach (var token in GenerateNestedEnum(nested))
+                // Output enum (using pre-loaded cache)
+                foreach (var token in GenerateNestedEnum(nested, enumMembersCache))
                 {
                     yield return token;
                 }
@@ -383,7 +404,8 @@ public class ClassOutputGenerator : TypeOutputGeneratorBase
         yield return new CodeToken(Environment.NewLine, TokenType.Whitespace);
     }
 
-    private IEnumerable<CodeToken> GenerateNestedEnum(TypeModel nested)
+    private IEnumerable<CodeToken> GenerateNestedEnum(TypeModel nested,
+        Dictionary<int, List<EnumMemberModel>>? enumMembersCache = null)
     {
         yield return new CodeToken("    ", TokenType.Whitespace);
         yield return new CodeToken("enum", TokenType.Keyword);
@@ -393,8 +415,16 @@ public class ClassOutputGenerator : TypeOutputGeneratorBase
         yield return new CodeToken("    {", TokenType.Punctuation);
         yield return new CodeToken(Environment.NewLine, TokenType.Whitespace);
 
-        // Output enum members
-        var enumMembers = Repository?.GetEnumMembers(nested.Id) ?? new List<EnumMemberModel>();
+        // Output enum members (use cache if available, otherwise fall back to query)
+        List<EnumMemberModel> enumMembers;
+        if (enumMembersCache != null && enumMembersCache.TryGetValue(nested.Id, out var cached))
+        {
+            enumMembers = cached;
+        }
+        else
+        {
+            enumMembers = Repository?.GetEnumMembers(nested.Id) ?? new List<EnumMemberModel>();
+        }
 
         foreach (var member in enumMembers)
         {

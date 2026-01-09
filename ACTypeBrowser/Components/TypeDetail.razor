@@ -307,10 +307,22 @@
 
     private string _activeTab = "definition";
 
+    // Cache for generated content - avoids regenerating on every render
+    private List<TypeModel>? _cachedTypeGroup;
+    private IEnumerable<CodeToken>? _cachedTokens;
+    private string? _cachedCSharpBindings;
+
     protected override void OnParametersSet()
     {
         _activeTab = !string.IsNullOrEmpty(ActiveTab) ? ActiveTab : "definition";
-        // LookupCache is lazily loaded on first access - no expensive GetAllTypes() call needed
+
+        // Invalidate cache if TypeGroup changed
+        if (!ReferenceEquals(TypeGroup, _cachedTypeGroup))
+        {
+            _cachedTypeGroup = TypeGroup;
+            _cachedTokens = null;
+            _cachedCSharpBindings = null;
+        }
     }
 
     private void SelectTab(string tab)
@@ -323,11 +335,41 @@
         await JSRuntime.InvokeVoidAsync("hljs.highlightAll");
     }
 
+    /// <summary>
+    /// Gets cached tokens, generating them lazily on first access.
+    /// </summary>
+    private IEnumerable<CodeToken> GetCachedTokens()
+    {
+        if (_cachedTokens != null)
+            return _cachedTokens;
+
+        if (TypeGroup == null || !TypeGroup.Any())
+            return Enumerable.Empty<CodeToken>();
+
+        _cachedTokens = GroupProcessor.GenerateGroupTokens(TypeGroup, includeHeaderAndNamespace: false).ToList();
+        return _cachedTokens;
+    }
+
+    /// <summary>
+    /// Gets cached C# bindings, generating them lazily on first access.
+    /// </summary>
+    private string GetCachedCSharpBindings()
+    {
+        if (_cachedCSharpBindings != null)
+            return _cachedCSharpBindings;
+
+        if (TypeGroup == null || !TypeGroup.Any())
+            return string.Empty;
+
+        _cachedCSharpBindings = CSharpProcessor.GenerateGroupContent(TypeGroup, includeNamespace: false);
+        return _cachedCSharpBindings;
+    }
+
     private RenderFragment RenderTokens() => builder =>
     {
         if (TypeGroup == null || !TypeGroup.Any()) return;
 
-        var tokens = GroupProcessor.GenerateGroupTokens(TypeGroup, includeHeaderAndNamespace: false);
+        var tokens = GetCachedTokens();
         int seq = 0;
         foreach (var token in tokens)
         {
@@ -383,10 +425,7 @@
 
     private string RenderCSharpBindings()
     {
-        if (TypeGroup == null || !TypeGroup.Any())
-            return string.Empty;
-
-        return CSharpProcessor.GenerateGroupContent(TypeGroup, includeNamespace: false);
+        return GetCachedCSharpBindings();
     }
 
 }

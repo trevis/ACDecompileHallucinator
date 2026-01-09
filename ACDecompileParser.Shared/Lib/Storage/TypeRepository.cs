@@ -784,4 +784,27 @@ public class TypeRepository : ITypeRepository
             .Where(sv => sv.ParentTypeId == typeId)
             .ToList();
     }
+
+    public Dictionary<int, List<StaticVariableModel>> GetStaticVariablesForMultipleTypes(IEnumerable<int> typeIds)
+    {
+        var idSet = typeIds.ToHashSet();
+        return _context.StaticVariables
+            .Include(sv => sv.TypeReference)
+            .ThenInclude(tr => tr!.ReferencedType)
+            .Where(sv => sv.ParentTypeId.HasValue && idSet.Contains(sv.ParentTypeId.Value))
+            .ToList()
+            .GroupBy(sv => sv.ParentTypeId!.Value)
+            .ToDictionary(g => g.Key, g => g.ToList());
+    }
+
+    public Dictionary<int, List<EnumMemberModel>> GetEnumMembersForMultipleTypes(IEnumerable<int> typeIds)
+    {
+        var idSet = typeIds.ToHashSet();
+        return _context.EnumMembers
+            .Where(em => idSet.Contains(em.EnumTypeId))
+            .ToList()
+            .GroupBy(em => em.EnumTypeId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+    }
 }
+

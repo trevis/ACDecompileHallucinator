@@ -1,4 +1,5 @@
 using ACTypeBrowser.Components;
+using ACTypeBrowser.Services;
 using ACDecompileParser.Shared.Lib.Storage;
 using ACDecompileParser.Shared.Lib.Services;
 using ACDecompileParser.Shared.Lib.Output;
@@ -23,13 +24,17 @@ builder.Services.AddDbContext<TypeContext>(options =>
 
 // Repositories and Services
 builder.Services.AddScoped<ITypeRepository, TypeRepository>();
-builder.Services.AddScoped<ITypeHierarchyService, TypeHierarchyService>();
+builder.Services.AddSingleton<ITypeHierarchyService, TypeHierarchyService>();
 builder.Services.AddScoped<HierarchyTreeBuilder>();
 
 // Hierarchy Rule Engine
-builder.Services.AddScoped<IInheritanceGraph>(sp =>
-    InheritanceGraphBuilder.Build(sp.GetRequiredService<ITypeRepository>()));
-builder.Services.AddScoped<HierarchyRuleEngine>(sp =>
+builder.Services.AddSingleton<IInheritanceGraph>(sp =>
+{
+    using var scope = sp.CreateScope();
+    var repo = scope.ServiceProvider.GetRequiredService<ITypeRepository>();
+    return InheritanceGraphBuilder.Build(repo);
+});
+builder.Services.AddSingleton<HierarchyRuleEngine>(sp =>
 {
     var engine = new HierarchyRuleEngine(sp.GetRequiredService<IInheritanceGraph>());
     engine.RegisterRules(DefaultHierarchyRules.GetDefaultRules());
@@ -37,10 +42,13 @@ builder.Services.AddScoped<HierarchyRuleEngine>(sp =>
 });
 
 // Performance optimization: TypeLookupCache for efficient type resolution
-builder.Services.AddScoped<TypeLookupCache>();
+builder.Services.AddSingleton<TypeLookupCache>();
+
+// Performance optimization: SidebarTreeCache for pre-built sidebar tree
+builder.Services.AddSingleton<SidebarTreeCache>();
 
 // Theme Service
-builder.Services.AddScoped<ACTypeBrowser.Services.ThemeService>();
+builder.Services.AddScoped<ThemeService>();
 
 // Code Generators
 builder.Services.AddScoped<ICodeGenerator, StructOutputGenerator>();
@@ -59,6 +67,17 @@ builder.Services.AddScoped<CSharpGroupProcessor>(sp =>
 
 
 var app = builder.Build();
+
+// Pre-warm caches at startup for faster first page load
+Console.WriteLine("Pre-warming caches...");
+var lookupCache = app.Services.GetRequiredService<TypeLookupCache>();
+lookupCache.EnsureLoaded();
+Console.WriteLine("  TypeLookupCache loaded.");
+
+var sidebarCache = app.Services.GetRequiredService<SidebarTreeCache>();
+sidebarCache.EnsureLoaded();
+Console.WriteLine("  SidebarTreeCache loaded.");
+Console.WriteLine("Cache pre-warming complete.");
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())

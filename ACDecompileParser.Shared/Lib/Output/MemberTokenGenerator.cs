@@ -14,6 +14,14 @@ public class MemberTokenGenerator
         _tokenizationService = tokenizationService;
     }
 
+    /// <summary>
+    /// Sets the lookup cache for efficient type resolution without database queries.
+    /// </summary>
+    public void SetLookupCache(TypeLookupCache cache)
+    {
+        _tokenizationService.SetLookupCache(cache);
+    }
+
     public IEnumerable<CodeToken> GenerateMemberTokens(StructMemberModel member, string? contextNamespace = null,
         FunctionBodyModel? matchedFunction = null)
     {

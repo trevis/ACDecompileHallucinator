@@ -51,27 +51,28 @@ public class TypeGroupProcessor
     {
         if (types == null || types.Count == 0) return Enumerable.Empty<CodeToken>();
 
-        // Pre-load all base types and members in batch (2 queries instead of 2N)
-        // This populates the type objects so generators don't need to query again
+        // Link parent/child relationships FIRST so we know all nested types
+        _hierarchyService.LinkNestedTypes(types);
+
+        // Now collect ALL type IDs including nested types
+        var allTypes = new List<TypeModel>(types);
+        foreach (var type in types)
+        {
+            CollectNestedTypes(type, allTypes);
+        }
+
+        var allTypeIds = allTypes.Select(t => t.Id).Distinct().ToList();
+
+        // Pre-load all data in batch for ALL types (including nested)
         if (_repository != null)
         {
-            var typeIds = types.Select(t => t.Id).ToList();
-            var allBaseTypes = _repository.GetBaseTypesForMultipleTypes(typeIds);
-            var allMembers = _repository.GetStructMembersForMultipleTypes(typeIds);
-            var allBodies = _repository.GetFunctionBodiesForMultipleTypes(typeIds);
-            // Fetch static variables in batch
-            var allStaticVariables = new Dictionary<int, List<StaticVariableModel>>();
-            foreach (var typeId in typeIds)
-            {
-                var svs = _repository.GetStaticVariablesForType(typeId);
-                if (svs.Any())
-                {
-                    allStaticVariables[typeId] = svs;
-                }
-            }
+            var allBaseTypes = _repository.GetBaseTypesForMultipleTypes(allTypeIds);
+            var allMembers = _repository.GetStructMembersForMultipleTypes(allTypeIds);
+            var allBodies = _repository.GetFunctionBodiesForMultipleTypes(allTypeIds);
+            var allStaticVariables = _repository.GetStaticVariablesForMultipleTypes(allTypeIds);
 
-            // Attach to types so generators find pre-loaded data
-            foreach (var type in types)
+            // Attach to ALL types so generators find pre-loaded data
+            foreach (var type in allTypes)
             {
                 if (allBaseTypes.TryGetValue(type.Id, out var baseTypes))
                     type.BaseTypes = baseTypes;
@@ -95,8 +96,6 @@ public class TypeGroupProcessor
             }
         }
 
-        // Link parent/child relationships for nested type output
-        _hierarchyService.LinkNestedTypes(types);
 
         var allTokens = new List<CodeToken>();
 
@@ -145,6 +144,24 @@ public class TypeGroupProcessor
 
         return allTokens;
     }
+
+    /// <summary>
+    /// Recursively collects all nested types from a type hierarchy for batch loading.
+    /// </summary>
+    private void CollectNestedTypes(TypeModel type, List<TypeModel> allTypes)
+    {
+        if (type.NestedTypes == null) return;
+
+        foreach (var nested in type.NestedTypes)
+        {
+            if (!allTypes.Contains(nested))
+            {
+                allTypes.Add(nested);
+                CollectNestedTypes(nested, allTypes);
+            }
+        }
+    }
+
 
     private List<string> GetDependenciesForGroup(List<TypeModel> types)
     {
