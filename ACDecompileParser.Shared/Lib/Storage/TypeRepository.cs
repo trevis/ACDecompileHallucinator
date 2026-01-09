@@ -306,8 +306,14 @@ public class TypeRepository : ITypeRepository
     {
         return _context.StructMembers
             .Include(sm => sm.TypeReference)
+            .ThenInclude(tr => tr!.ReferencedType)
+            .Include(sm => sm.FunctionSignature)
+            .ThenInclude(fs => fs!.ReturnTypeReference)
+            .ThenInclude(tr => tr!.ReferencedType)
             .Include(sm => sm.FunctionSignature)
             .ThenInclude(fs => fs!.Parameters)
+            .ThenInclude(p => p.TypeReference)
+            .ThenInclude(tr => tr!.ReferencedType)
             .Where(sm => sm.StructTypeId == structTypeId)
             .ToList();
     }
@@ -633,15 +639,24 @@ public class TypeRepository : ITypeRepository
                         (t.BaseTypePath != null && t.BaseTypePath == targetFqn))
             .Include(t => t.TemplateArguments)
             .ThenInclude(ta => ta.TypeReference)
+            .ThenInclude(tr => tr!.ReferencedType)
             .Include(t => t.BaseTypes)
             .ThenInclude(bt => bt.RelatedType)
             .Include(t => t.StructMembers)
             .ThenInclude(sm => sm.TypeReference)
+            .ThenInclude(tr => tr!.ReferencedType)
+            .Include(t => t.StructMembers)
+            .ThenInclude(sm => sm.FunctionSignature)
+            .ThenInclude(fs => fs!.ReturnTypeReference)
+            .ThenInclude(tr => tr!.ReferencedType)
             .Include(t => t.StructMembers)
             .ThenInclude(sm => sm.FunctionSignature)
             .ThenInclude(fs => fs!.Parameters)
+            .ThenInclude(p => p.TypeReference)
+            .ThenInclude(tr => tr!.ReferencedType)
             .Include(t => t.StaticVariables)
             .ThenInclude(sv => sv.TypeReference)
+            .ThenInclude(tr => tr!.ReferencedType)
             .ToList();
     }
 
@@ -687,8 +702,14 @@ public class TypeRepository : ITypeRepository
         var idSet = typeIds.ToHashSet();
         return _context.StructMembers
             .Include(sm => sm.TypeReference)
+            .ThenInclude(tr => tr!.ReferencedType)
+            .Include(sm => sm.FunctionSignature)
+            .ThenInclude(fs => fs!.ReturnTypeReference)
+            .ThenInclude(tr => tr!.ReferencedType)
             .Include(sm => sm.FunctionSignature)
             .ThenInclude(fs => fs!.Parameters)
+            .ThenInclude(p => p.TypeReference)
+            .ThenInclude(tr => tr!.ReferencedType)
             .Where(sm => idSet.Contains(sm.StructTypeId))
             .ToList()
             .GroupBy(sm => sm.StructTypeId)
@@ -700,29 +721,50 @@ public class TypeRepository : ITypeRepository
         _context.FunctionBodies.Add(functionBody);
         return functionBody.Id;
     }
+
     public List<FunctionBodyModel> GetFunctionBodiesForType(int typeId)
     {
         return _context.FunctionBodies
             .Include(fb => fb.FunctionSignature)
-                .ThenInclude(fs => fs.Parameters)
-                    .ThenInclude(p => p.NestedFunctionSignature)
-                        .ThenInclude(nfs => nfs.Parameters)
+            .ThenInclude(fs => fs!.ReturnTypeReference)
+            .ThenInclude(tr => tr!.ReferencedType)
+            .Include(fb => fb.FunctionSignature)
+            .ThenInclude(fs => fs!.Parameters)
+            .ThenInclude(p => p.TypeReference)
+            .ThenInclude(tr => tr!.ReferencedType)
+            .Include(fb => fb.FunctionSignature)
+            .ThenInclude(fs => fs!.Parameters)
+            .ThenInclude(p => p.NestedFunctionSignature)
+            .ThenInclude(nfs => nfs!.Parameters)
+            .ThenInclude(p => p.TypeReference)
+            .ThenInclude(tr => tr!.ReferencedType)
             .Where(fb => fb.ParentId == typeId)
             .ToList();
     }
+
     public Dictionary<int, List<FunctionBodyModel>> GetFunctionBodiesForMultipleTypes(IEnumerable<int> typeIds)
     {
         var idSet = typeIds.ToHashSet();
         return _context.FunctionBodies
             .Include(fb => fb.FunctionSignature)
-                .ThenInclude(fs => fs.Parameters)
-                    .ThenInclude(p => p.NestedFunctionSignature)
-                        .ThenInclude(nfs => nfs.Parameters)
+            .ThenInclude(fs => fs!.ReturnTypeReference)
+            .ThenInclude(tr => tr!.ReferencedType)
+            .Include(fb => fb.FunctionSignature)
+            .ThenInclude(fs => fs!.Parameters)
+            .ThenInclude(p => p.TypeReference)
+            .ThenInclude(tr => tr!.ReferencedType)
+            .Include(fb => fb.FunctionSignature)
+            .ThenInclude(fs => fs!.Parameters)
+            .ThenInclude(p => p.NestedFunctionSignature)
+            .ThenInclude(nfs => nfs!.Parameters)
+            .ThenInclude(p => p.TypeReference)
+            .ThenInclude(tr => tr!.ReferencedType)
             .Where(fb => fb.ParentId.HasValue && idSet.Contains(fb.ParentId.Value))
             .ToList()
             .GroupBy(fb => fb.ParentId!.Value)
             .ToDictionary(g => g.Key, g => g.ToList());
     }
+
     public int InsertStaticVariable(StaticVariableModel staticVariable)
     {
         _context.StaticVariables.Add(staticVariable);
@@ -738,6 +780,7 @@ public class TypeRepository : ITypeRepository
     {
         return _context.StaticVariables
             .Include(sv => sv.TypeReference)
+            .ThenInclude(tr => tr!.ReferencedType)
             .Where(sv => sv.ParentTypeId == typeId)
             .ToList();
     }

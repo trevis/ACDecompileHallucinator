@@ -57,7 +57,7 @@ public static class IgnoreFilter
     {
         "_IDClass", "D3DPolyRender", "_GUID", "IFileNodeName", "IFileNodeName_vtbl",
         "_tagDataID", "_tag", "_tagVersionHandle", "_tagCellID", "tagPOINT", "CEmoteTable",
-        "tagRECT"
+        "tagRECT", "_D3DPOOL", "_D3DFORMAT"
     };
 
     /// <summary>
