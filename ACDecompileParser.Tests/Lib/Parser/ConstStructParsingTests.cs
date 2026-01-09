@@ -42,7 +42,7 @@ public class ConstStructParsingTests
         var optionsBuilder = new DbContextOptionsBuilder<TypeContext>();
         optionsBuilder.UseInMemoryDatabase(Guid.NewGuid().ToString());
         using var context = new TypeContext(optionsBuilder.Options);
-        using var repo = new TypeRepository(context);
+        using var repo = new SqlTypeRepository(context);
 
         // Act
         parser.Parse();
@@ -51,7 +51,7 @@ public class ConstStructParsingTests
         // Assert
         var allTypes = repo.GetAllTypes();
         Assert.Equal(3, allTypes.Count); // 3 types: ArchiveVersionRow, ArchiveVersionRow_vtbl, ArchiveVersionRow::VersionEntry
-        
+
         // Find the ArchiveVersionRow type
         var archiveVersionRowType = allTypes.FirstOrDefault(t => t.FullyQualifiedName == "ArchiveVersionRow");
 
@@ -59,7 +59,7 @@ public class ConstStructParsingTests
         Assert.Equal("ArchiveVersionRow", archiveVersionRowType.BaseName);
         Assert.Equal(TypeType.Struct, archiveVersionRowType.Type);
     }
-    
+
     [Fact]
     public void ParseNonConstStruct_DoesNotSetIsConstProperty()
     {
@@ -81,7 +81,7 @@ public class ConstStructParsingTests
         var optionsBuilder = new DbContextOptionsBuilder<TypeContext>();
         optionsBuilder.UseInMemoryDatabase(Guid.NewGuid().ToString());
         using var context = new TypeContext(optionsBuilder.Options);
-        using var repo = new TypeRepository(context);
+        using var repo = new SqlTypeRepository(context);
 
         // Act
         parser.Parse();
@@ -94,7 +94,7 @@ public class ConstStructParsingTests
         var regularStructType = allTypes.First();
         Assert.Equal("RegularStruct", regularStructType.FullyQualifiedName);
     }
-    
+
     [Fact]
     public void ParseConstStruct_GeneratesCorrectHeaderFile()
     {
@@ -117,11 +117,11 @@ public class ConstStructParsingTests
         var optionsBuilder = new DbContextOptionsBuilder<TypeContext>();
         optionsBuilder.UseInMemoryDatabase(Guid.NewGuid().ToString());
         using var context = new TypeContext(optionsBuilder.Options);
-        using var repo = new TypeRepository(context);
+        using var repo = new SqlTypeRepository(context);
 
         // Create a temporary directory for header output
         string tempDir = Path.Combine(Path.GetTempPath(), "test_output_" + Guid.NewGuid().ToString());
-        
+
         try
         {
             // Act
@@ -131,13 +131,13 @@ public class ConstStructParsingTests
 
             // Assert
             var allFiles = Directory.GetFiles(tempDir, "*.h", SearchOption.AllDirectories);
-            
+
             // Should only be one file: ArchiveVersionRow.h
             Assert.Single(allFiles);
-            
+
             string headerFilePath = allFiles[0];
             Assert.Contains("ArchiveVersionRow.h", headerFilePath);
-            
+
             // Verify the file contains the struct definition
             string fileContent = File.ReadAllText(headerFilePath);
             Assert.Contains("struct ArchiveVersionRow", fileContent);

@@ -174,7 +174,7 @@ struct IDClass<_tagVersionHandle,32,32>
         var optionsBuilder = new DbContextOptionsBuilder<TypeContext>();
         optionsBuilder.UseInMemoryDatabase(Guid.NewGuid().ToString());
         using var context = new TypeContext(optionsBuilder.Options);
-        using var repo = new TypeRepository(context);
+        using var repo = new SqlTypeRepository(context);
 
         // Act - Save to database
         repo.InsertType(typeModel);
@@ -222,7 +222,7 @@ struct AutoGrowHashTable<unsigned long,SmartArray<UIMessageData,1>>
         var optionsBuilder = new DbContextOptionsBuilder<TypeContext>();
         optionsBuilder.UseInMemoryDatabase(Guid.NewGuid().ToString());
         using var context = new TypeContext(optionsBuilder.Options);
-        using var repo = new TypeRepository(context);
+        using var repo = new SqlTypeRepository(context);
 
         // Act - Save to database
         foreach (var s in structs)

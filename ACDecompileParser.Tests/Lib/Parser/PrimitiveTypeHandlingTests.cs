@@ -109,7 +109,7 @@ public class PrimitiveTypeHandlingTests
         using var context = new TypeContext(options);
         context.Database.EnsureCreated();
 
-        using var repository = new TypeRepository(context);
+        using var repository = new SqlTypeRepository(context);
 
         // Create a user-defined type that exists in the database
         var existingType = new TypeModel
@@ -152,14 +152,14 @@ public class PrimitiveTypeHandlingTests
         // Arrange
         var primitiveTypes = new[]
         {
-            "int", "char", "float", "double", "bool", "void", "short", "long", 
+            "int", "char", "float", "double", "bool", "void", "short", "long",
             "signed", "unsigned", "wchar_t", "char16_t", "char32_t", "auto", "nullptr_t"
         };
 
         // Act & Assert
         foreach (var primitiveType in primitiveTypes)
         {
-            Assert.True(ParsingUtilities.IsCppTypeKeyword(primitiveType), 
+            Assert.True(ParsingUtilities.IsCppTypeKeyword(primitiveType),
                 $"Type '{primitiveType}' should be identified as a C++ keyword");
         }
     }
@@ -168,7 +168,7 @@ public class PrimitiveTypeHandlingTests
     public void SourceParser_DoesNotFailOnPrimitiveTypesInDatabase()
     {
         // This test verifies that the fix doesn't break when primitive types are encountered
-        
+
         // Arrange
         var sourceLines = new List<List<string>>
         {

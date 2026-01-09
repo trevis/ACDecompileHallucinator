@@ -49,7 +49,7 @@ struct __cppobj PrimitiveInplaceArray<ArchiveVersionRow::VersionEntry,8,1> : Sma
         optionsBuilder.UseInMemoryDatabase(Guid.NewGuid().ToString());
         using var context = new TypeContext(optionsBuilder.Options);
         context.Database.EnsureCreated();
-        using var repo = new TypeRepository(context);
+        using var repo = new SqlTypeRepository(context);
 
         // Save to database (this is where duplication might occur)
         parser.SaveToDatabase(repo);
@@ -107,7 +107,7 @@ struct __cppobj IDClass<_tagVersionHandle,32,32>
         optionsBuilder.UseInMemoryDatabase(Guid.NewGuid().ToString());
         using var context = new TypeContext(optionsBuilder.Options);
         context.Database.EnsureCreated();
-        using var repo = new TypeRepository(context);
+        using var repo = new SqlTypeRepository(context);
 
         // Save to database
         parser.SaveToDatabase(repo);
@@ -167,7 +167,7 @@ struct __cppobj PrimitiveInplaceArray<ArchiveVersionRow::VersionEntry,8,1> : Sma
         optionsBuilder.UseInMemoryDatabase(Guid.NewGuid().ToString());
         using var context = new TypeContext(optionsBuilder.Options);
         context.Database.EnsureCreated();
-        using var repo = new TypeRepository(context);
+        using var repo = new SqlTypeRepository(context);
 
         // Save to database
         parser.SaveToDatabase(repo);
@@ -227,7 +227,7 @@ struct __cppobj IDClass<_tagVersionHandle,32,32>
         optionsBuilder.UseInMemoryDatabase(Guid.NewGuid().ToString());
         using var context = new TypeContext(optionsBuilder.Options);
         context.Database.EnsureCreated();
-        using var repo = new TypeRepository(context);
+        using var repo = new SqlTypeRepository(context);
 
         parser.SaveToDatabase(repo);
 

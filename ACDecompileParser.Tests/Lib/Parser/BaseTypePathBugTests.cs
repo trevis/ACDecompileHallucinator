@@ -72,7 +72,7 @@ struct __cppobj PrimitiveInplaceArray<ArchiveVersionRow::VersionEntry,8,1> : Sma
         var optionsBuilder = new DbContextOptionsBuilder<TypeContext>();
         optionsBuilder.UseInMemoryDatabase(Guid.NewGuid().ToString());
         using var context = new TypeContext(optionsBuilder.Options);
-        using var repo = new TypeRepository(context);
+        using var repo = new SqlTypeRepository(context);
 
         // Convert to TypeModel and save
         foreach (var s in structs)
@@ -134,7 +134,7 @@ struct __cppobj PrimitiveInplaceArray<ArchiveVersionRow::VersionEntry,8,1> : Sma
         var optionsBuilder = new DbContextOptionsBuilder<TypeContext>();
         optionsBuilder.UseInMemoryDatabase(Guid.NewGuid().ToString());
         using var context = new TypeContext(optionsBuilder.Options);
-        using var repo = new TypeRepository(context);
+        using var repo = new SqlTypeRepository(context);
 
         // Convert to TypeModel and save
         foreach (var s in structs)

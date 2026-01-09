@@ -217,7 +217,7 @@ public class SourceParserTests
         var optionsBuilder = new DbContextOptionsBuilder<TypeContext>();
         optionsBuilder.UseInMemoryDatabase(Guid.NewGuid().ToString());
         using var context = new TypeContext(optionsBuilder.Options);
-        using var repo = new ACDecompileParser.Shared.Lib.Storage.TypeRepository(context);
+        using var repo = new ACDecompileParser.Shared.Lib.Storage.SqlTypeRepository(context);
 
         // Act
         parser.SaveToDatabase(repo);
@@ -259,7 +259,7 @@ public class SourceParserTests
         var optionsBuilder = new DbContextOptionsBuilder<TypeContext>();
         optionsBuilder.UseInMemoryDatabase(Guid.NewGuid().ToString());
         using var context = new TypeContext(optionsBuilder.Options);
-        using var repo = new ACDecompileParser.Shared.Lib.Storage.TypeRepository(context);
+        using var repo = new ACDecompileParser.Shared.Lib.Storage.SqlTypeRepository(context);
 
         // Act
         parser.SaveToDatabase(repo);
@@ -303,7 +303,7 @@ public class SourceParserTests
         var optionsBuilder = new DbContextOptionsBuilder<TypeContext>();
         optionsBuilder.UseInMemoryDatabase(Guid.NewGuid().ToString());
         using var context = new TypeContext(optionsBuilder.Options);
-        using var repo = new ACDecompileParser.Shared.Lib.Storage.TypeRepository(context);
+        using var repo = new ACDecompileParser.Shared.Lib.Storage.SqlTypeRepository(context);
 
         // Act
         parser.SaveToDatabase(repo);
@@ -345,7 +345,7 @@ public class SourceParserTests
         var optionsBuilder = new DbContextOptionsBuilder<TypeContext>();
         optionsBuilder.UseInMemoryDatabase(Guid.NewGuid().ToString());
         using var context = new TypeContext(optionsBuilder.Options);
-        using var repo = new ACDecompileParser.Shared.Lib.Storage.TypeRepository(context);
+        using var repo = new ACDecompileParser.Shared.Lib.Storage.SqlTypeRepository(context);
 
         // Act
         parser.SaveToDatabase(repo);
@@ -397,7 +397,7 @@ public class SourceParserTests
         var optionsBuilder = new DbContextOptionsBuilder<TypeContext>();
         optionsBuilder.UseInMemoryDatabase(Guid.NewGuid().ToString());
         using var context = new TypeContext(optionsBuilder.Options);
-        using var repo = new ACDecompileParser.Shared.Lib.Storage.TypeRepository(context);
+        using var repo = new ACDecompileParser.Shared.Lib.Storage.SqlTypeRepository(context);
 
         // Act
         parser.SaveToDatabase(repo);

@@ -32,7 +32,7 @@ public class VolatileStructParsingTests
         var optionsBuilder = new DbContextOptionsBuilder<TypeContext>();
         optionsBuilder.UseInMemoryDatabase(Guid.NewGuid().ToString());
         using var context = new TypeContext(optionsBuilder.Options);
-        using var repo = new TypeRepository(context);
+        using var repo = new SqlTypeRepository(context);
 
         // Act
         parser.Parse();
@@ -41,7 +41,7 @@ public class VolatileStructParsingTests
         // Assert
         var allTypes = repo.GetAllTypes();
         Assert.Single(allTypes); // 1 type: TimeSource_QueryPerformanceCounter::StateData
-        
+
         // Find the StateData type
         var stateDataType = allTypes.FirstOrDefault(t => t.FullyQualifiedName == "TimeSource_QueryPerformanceCounter::StateData");
 
@@ -51,7 +51,7 @@ public class VolatileStructParsingTests
         Assert.Equal(TypeType.Struct, stateDataType.Type);
         Assert.True(stateDataType.IsVolatile); // Verify the volatile property is set
     }
-    
+
     [Fact]
     public void ParseNonVolatileStruct_DoesNotSetIsVolatileProperty()
     {
@@ -73,7 +73,7 @@ public class VolatileStructParsingTests
         var optionsBuilder = new DbContextOptionsBuilder<TypeContext>();
         optionsBuilder.UseInMemoryDatabase(Guid.NewGuid().ToString());
         using var context = new TypeContext(optionsBuilder.Options);
-        using var repo = new TypeRepository(context);
+        using var repo = new SqlTypeRepository(context);
 
         // Act
         parser.Parse();
@@ -87,7 +87,7 @@ public class VolatileStructParsingTests
         Assert.Equal("RegularStruct", regularStructType.FullyQualifiedName);
         Assert.False(regularStructType.IsVolatile); // Verify the volatile property is not set
     }
-    
+
     [Fact]
     public void ParseVolatileStruct_WithNamespace_GeneratesCorrectHeaderFile()
     {
@@ -110,11 +110,11 @@ public class VolatileStructParsingTests
         var optionsBuilder = new DbContextOptionsBuilder<TypeContext>();
         optionsBuilder.UseInMemoryDatabase(Guid.NewGuid().ToString());
         using var context = new TypeContext(optionsBuilder.Options);
-        using var repo = new TypeRepository(context);
+        using var repo = new SqlTypeRepository(context);
 
         // Create a temporary directory for header output
         string tempDir = Path.Combine(Path.GetTempPath(), "test_output_" + Guid.NewGuid().ToString());
-        
+
         try
         {
             // Act
@@ -124,13 +124,13 @@ public class VolatileStructParsingTests
 
             // Assert
             var allFiles = Directory.GetFiles(tempDir, "*.h", SearchOption.AllDirectories);
-            
+
             // Should only be one file: StateData.h
             Assert.Single(allFiles);
-            
+
             string headerFilePath = allFiles[0];
             Assert.Contains("StateData.h", headerFilePath);
-            
+
             // Verify the file contains the struct definition
             string fileContent = File.ReadAllText(headerFilePath);
             Assert.Contains("struct TimeSource_QueryPerformanceCounter::StateData", fileContent);
@@ -146,7 +146,7 @@ public class VolatileStructParsingTests
             }
         }
     }
-    
+
     [Fact]
     public void ParseVolatileStruct_WithoutNamespace_DetectsCorrectly()
     {
@@ -169,7 +169,7 @@ public class VolatileStructParsingTests
         var optionsBuilder = new DbContextOptionsBuilder<TypeContext>();
         optionsBuilder.UseInMemoryDatabase(Guid.NewGuid().ToString());
         using var context = new TypeContext(optionsBuilder.Options);
-        using var repo = new TypeRepository(context);
+        using var repo = new SqlTypeRepository(context);
 
         // Act
         parser.Parse();
@@ -186,7 +186,7 @@ public class VolatileStructParsingTests
         Assert.Equal(TypeType.Struct, volatileStructType.Type);
         Assert.True(volatileStructType.IsVolatile); // Verify the volatile property is set
     }
-    
+
     [Fact]
     public void ParseBothConstAndVolatileStruct_DistinguishesCorrectly()
     {
@@ -214,7 +214,7 @@ public class VolatileStructParsingTests
         var optionsBuilder = new DbContextOptionsBuilder<TypeContext>();
         optionsBuilder.UseInMemoryDatabase(Guid.NewGuid().ToString());
         using var context = new TypeContext(optionsBuilder.Options);
-        using var repo = new TypeRepository(context);
+        using var repo = new SqlTypeRepository(context);
 
         // Act
         parser.Parse();
@@ -223,7 +223,7 @@ public class VolatileStructParsingTests
         // Assert
         var allTypes = repo.GetAllTypes();
         Assert.Equal(2, allTypes.Count); // 2 types: ConstStruct and VolatileStruct
-        
+
         // Find the const struct
         var constStructType = allTypes.FirstOrDefault(t => t.FullyQualifiedName == "ConstStruct");
         Assert.NotNull(constStructType);

@@ -57,11 +57,11 @@ public class DebugVtableNestedTest
         var optionsBuilder = new DbContextOptionsBuilder<TypeContext>();
         optionsBuilder.UseInMemoryDatabase(Guid.NewGuid().ToString());
         using var context = new TypeContext(optionsBuilder.Options);
-        using var repo = new TypeRepository(context);
+        using var repo = new SqlTypeRepository(context);
 
         // Act
         parser.Parse();
-        
+
         // Print information about parsed types before saving to database
         Console.WriteLine($"Parsed {parser.TypeModels.Count} type models:");
         foreach (var typeModel in parser.TypeModels)
