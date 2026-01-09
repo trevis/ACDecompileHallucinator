@@ -161,9 +161,9 @@ public class CSharpBindingsGenerator
         string interfaces = hasDestructor ? " : System.IDisposable" : "";
 
         // Struct declaration
-        // Struct declaration
         string safeBaseName = GetGeneratedTypeName(type);
 
+        sb.AppendLine($"{indent}// {type.FullyQualifiedName}");
         sb.AppendLine($"{indent}public unsafe struct {safeBaseName}{interfaces}");
         sb.AppendLine($"{indent}{{");
 
@@ -519,6 +519,7 @@ public class CSharpBindingsGenerator
         string underlyingType = PrimitiveTypeMappings.GetEnumUnderlyingType(members);
         string safeBaseName = PrimitiveTypeMappings.CleanTypeName(type.BaseName);
 
+        sb.AppendLine($"{indent}// {type.FullyQualifiedName}");
         sb.AppendLine($"{indent}public enum {safeBaseName} : {underlyingType}");
         sb.AppendLine($"{indent}{{");
 

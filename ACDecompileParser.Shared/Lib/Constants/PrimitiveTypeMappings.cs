@@ -102,6 +102,7 @@ public static class PrimitiveTypeMappings
         { "LPBYTE", "byte*" },
         { "HKEY", "int" },
         { "LPCSTR", "sbyte*"},
+        { "_iobuf", "byte"}
     };
 
     /// <summary>
