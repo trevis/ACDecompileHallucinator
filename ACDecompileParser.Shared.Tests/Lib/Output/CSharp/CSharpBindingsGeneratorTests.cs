@@ -546,4 +546,55 @@ public class CSharpBindingsGeneratorTests
         Assert.Contains("delegate* unmanaged[Cdecl]<ACBindings.UIMainFramework*>", output);
         Assert.Contains("createMethod", output);
     }
+    [Fact]
+    public void Test_Reserved_Keyword_Renaming()
+    {
+        var type = new TypeModel
+        {
+            Id = 1,
+            BaseName = "OBJECTINFO",
+            Type = TypeType.Struct,
+            StructMembers = new List<StructMemberModel>
+            {
+                new() { Name = "object", TypeString = "CPhysicsObj*", DeclarationOrder = 1 },
+                new() { Name = "state", TypeString = "int", DeclarationOrder = 2 }
+            },
+            FunctionBodies = new List<FunctionBodyModel>
+            {
+                new()
+                {
+                    Id = 101,
+                    FullyQualifiedName = "OBJECTINFO::init",
+                    FunctionSignature = new FunctionSignatureModel
+                    {
+                        ReturnType = "void",
+                        CallingConvention = "Thiscall",
+                        Parameters = new List<FunctionParamModel>
+                        {
+                            new() { Name = "this", ParameterType = "OBJECTINFO*", Position = 0 },
+                            new() { Name = "object", ParameterType = "CPhysicsObj*", Position = 1 },
+                            new() { Name = "object_state", ParameterType = "int", Position = 2 }
+                        }
+                    },
+                    Offset = 0x0050DA00
+                }
+            },
+            StaticVariables = new List<StaticVariableModel>
+            {
+                new() { Name = "using", TypeString = "int*", Address = "0x12345678" }
+            }
+        };
+
+        var output = _generator.Generate(type);
+        _testOutput.WriteLine(output);
+
+        // Member renaming
+        Assert.Contains("public ACBindings.CPhysicsObj* object_;", output);
+
+        // Parameter renaming in method
+        Assert.Contains("init(ACBindings.CPhysicsObj* object_, int object_state)", output);
+
+        // Static variable renaming
+        Assert.Contains("public static int* using_ = (int*)0x12345678;", output);
+    }
 }
