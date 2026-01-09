@@ -27,7 +27,7 @@ public class TypeRepositoryTests
     {
         // Arrange
         using var context = CreateContext();
-        using var repository = new TypeRepository(context);
+        using var repository = new SqlTypeRepository(context);
 
         var typeModel = new TypeModel
         {
@@ -55,7 +55,7 @@ public class TypeRepositoryTests
     {
         // Arrange
         using var context = CreateContext();
-        using var repository = new TypeRepository(context);
+        using var repository = new SqlTypeRepository(context);
 
         var typeModel = new TypeModel
         {
@@ -100,7 +100,7 @@ public class TypeRepositoryTests
     {
         // Arrange
         using var context = CreateContext();
-        using var repository = new TypeRepository(context);
+        using var repository = new SqlTypeRepository(context);
 
         var typeModel = new TypeModel
         {
@@ -132,7 +132,7 @@ public class TypeRepositoryTests
     {
         // Arrange
         using var context = CreateContext();
-        using var repository = new TypeRepository(context);
+        using var repository = new SqlTypeRepository(context);
 
         var typeModel = new TypeModel
         {
@@ -158,7 +158,7 @@ public class TypeRepositoryTests
     {
         // Arrange
         using var context = CreateContext();
-        using var repository = new TypeRepository(context);
+        using var repository = new SqlTypeRepository(context);
 
         var type1 = new TypeModel
         {
@@ -192,7 +192,7 @@ public class TypeRepositoryTests
     {
         // Arrange
         using var context = CreateContext();
-        using var repository = new TypeRepository(context);
+        using var repository = new SqlTypeRepository(context);
 
         var type1 = new TypeModel
         {
@@ -226,7 +226,7 @@ public class TypeRepositoryTests
     {
         // Arrange
         using var context = CreateContext();
-        using var repository = new TypeRepository(context);
+        using var repository = new SqlTypeRepository(context);
 
         var type1 = new TypeModel
         {
@@ -260,7 +260,7 @@ public class TypeRepositoryTests
     {
         // Arrange
         using var context = CreateContext();
-        using var repository = new TypeRepository(context);
+        using var repository = new SqlTypeRepository(context);
 
         var typeModel = new TypeModel
         {
@@ -288,7 +288,7 @@ public class TypeRepositoryTests
     {
         // Arrange
         using var context = CreateContext();
-        using var repository = new TypeRepository(context);
+        using var repository = new SqlTypeRepository(context);
 
         var type1 = new TypeModel
         {
@@ -321,7 +321,7 @@ public class TypeRepositoryTests
     {
         // Arrange
         using var context = CreateContext();
-        using var repository = new TypeRepository(context);
+        using var repository = new SqlTypeRepository(context);
 
         var typeModel = new TypeModel
         {
@@ -358,7 +358,7 @@ public class TypeRepositoryTests
     {
         // Arrange
         using var context = CreateContext();
-        using var repository = new TypeRepository(context);
+        using var repository = new SqlTypeRepository(context);
 
         var typeModel = new TypeModel
         {
@@ -399,7 +399,7 @@ public class TypeRepositoryTests
     {
         // Arrange
         using var context = CreateContext();
-        using var repository = new TypeRepository(context);
+        using var repository = new SqlTypeRepository(context);
 
         var functionSignature = new FunctionSignatureModel
         {

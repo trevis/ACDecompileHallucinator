@@ -26,7 +26,7 @@ public class TypeRepositoryGroupingTests
     {
         // Arrange
         using var context = CreateContext();
-        using var repository = new TypeRepository(context);
+        using var repository = new SqlTypeRepository(context);
 
         // 1. The main type we are grouping
         var uiRegion = new TypeModel

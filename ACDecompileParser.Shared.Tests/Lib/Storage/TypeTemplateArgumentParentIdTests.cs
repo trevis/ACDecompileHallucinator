@@ -17,10 +17,10 @@ public class TypeTemplateArgumentParentIdTests
         var options = new DbContextOptionsBuilder<TypeContext>()
             .UseInMemoryDatabase(databaseName: "TestDatabase_TemplateArguments")
             .Options;
-        
+
         using var context = new TypeContext(options);
-        var repository = new TypeRepository(context);
-        
+        var repository = new SqlTypeRepository(context);
+
         // Create a struct with template arguments
         var structModel = new StructTypeModel
         {
@@ -32,31 +32,31 @@ public class TypeTemplateArgumentParentIdTests
                 new TypeReference { TypeString = "std::string" }
             }
         };
-        
+
         var typeModels = new List<TypeModel> { structModel.MakeTypeModel() };
-        
+
         // Act
         repository.InsertTypes(typeModels);
         repository.SaveChanges(); // This assigns IDs to the types
-        
+
         // Get the saved type to check its ID
         var savedType = repository.GetTypeByFullyQualifiedName("TestNS::MyTemplateStruct");
-        
+
         // Assert
         Assert.NotNull(savedType);
         Assert.True(savedType.Id > 0);
-        
+
         // Check that template arguments were created but ParentTypeId is currently 0 (the bug)
         var templateArgs = repository.GetTemplateArguments(savedType.Id);
         Assert.NotEmpty(templateArgs);
-        
+
         // This currently fails because ParentTypeId is not set after saving
         foreach (var templateArg in templateArgs)
         {
             Assert.Equal(savedType.Id, templateArg.ParentTypeId);
         }
     }
-    
+
     [Fact]
     public void SourceParser_SaveToDatabase_ShouldSetTemplateArgumentParentIds()
     {
@@ -74,7 +74,7 @@ public class TypeTemplateArgumentParentIdTests
         // which is a separate concern from the relationship storage fix.
         Assert.True(true);
     }
-    
+
     [Fact]
     public void TemplateArguments_TypeReferenceId_ShouldBeNullWhenNotUsingTypeReference()
     {
@@ -82,10 +82,10 @@ public class TypeTemplateArgumentParentIdTests
         var options = new DbContextOptionsBuilder<TypeContext>()
             .UseInMemoryDatabase(databaseName: "TestDatabase_TypeReferenceId")
             .Options;
-        
+
         using var context = new TypeContext(options);
-        var repository = new TypeRepository(context);
-        
+        var repository = new SqlTypeRepository(context);
+
         // Create a struct with template arguments
         var structModel = new StructTypeModel
         {
@@ -96,24 +96,24 @@ public class TypeTemplateArgumentParentIdTests
                 new TypeReference { TypeString = "int" }
             }
         };
-        
+
         var typeModels = new List<TypeModel> { structModel.MakeTypeModel() };
-        
+
         // Act
         repository.InsertTypes(typeModels);
         repository.SaveChanges();
-        
+
         // Get the saved type
         var savedType = repository.GetTypeByFullyQualifiedName("TestNS::MyTemplateStruct");
-        
+
         // Assert
         Assert.NotNull(savedType);
         Assert.True(savedType.Id > 0);
-        
+
         // Check that template arguments TypeReferenceId is null (as expected for direct type references)
         var templateArgs = repository.GetTemplateArguments(savedType.Id);
         Assert.NotEmpty(templateArgs);
-        
+
         foreach (var templateArg in templateArgs)
         {
             // For template arguments that directly reference types by name, TypeReferenceId should be null

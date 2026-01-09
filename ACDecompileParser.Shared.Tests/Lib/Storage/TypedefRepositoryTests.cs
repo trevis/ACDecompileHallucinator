@@ -24,7 +24,7 @@ public class TypedefRepositoryTests
     {
         // Arrange
         using var context = CreateContext();
-        using var repository = new TypeRepository(context);
+        using var repository = new SqlTypeRepository(context);
 
         var typeModel = new TypeModel
         {
@@ -76,7 +76,7 @@ public class TypedefRepositoryTests
     {
         // Arrange
         using var context = CreateContext();
-        using var repository = new TypeRepository(context);
+        using var repository = new SqlTypeRepository(context);
 
         var typeModel = new TypeModel
         {
@@ -131,7 +131,7 @@ public class TypedefRepositoryTests
     {
         // Arrange
         using var context = CreateContext();
-        using var repository = new TypeRepository(context);
+        using var repository = new SqlTypeRepository(context);
 
         // Act
         var result = repository.GetTypeDefByName("NonExistentTypedef");
@@ -145,7 +145,7 @@ public class TypedefRepositoryTests
     {
         // Arrange
         using var context = CreateContext();
-        using var repository = new TypeRepository(context);
+        using var repository = new SqlTypeRepository(context);
 
         // Create base type (int)
         var intType = new TypeModel
@@ -266,7 +266,7 @@ public class TypedefRepositoryTests
     {
         // Arrange
         using var context = CreateContext();
-        using var repository = new TypeRepository(context);
+        using var repository = new SqlTypeRepository(context);
 
         // Create circular typedef: A -> B -> A
         // typedef B A;
@@ -342,7 +342,7 @@ public class TypedefRepositoryTests
     {
         // Arrange
         using var context = CreateContext();
-        using var repository = new TypeRepository(context);
+        using var repository = new SqlTypeRepository(context);
 
         // Create multiple typedefs
         for (int i = 0; i < 3; i++)

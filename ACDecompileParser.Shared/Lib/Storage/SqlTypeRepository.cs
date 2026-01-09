@@ -4,12 +4,12 @@ using ACDecompileParser.Shared.Lib.Services;
 
 namespace ACDecompileParser.Shared.Lib.Storage;
 
-public class TypeRepository : ITypeRepository
+public class SqlTypeRepository : ITypeRepository
 {
     private readonly TypeContext _context;
     private bool _disposed;
 
-    public TypeRepository(TypeContext context)
+    public SqlTypeRepository(TypeContext context)
     {
         _context = context;
     }

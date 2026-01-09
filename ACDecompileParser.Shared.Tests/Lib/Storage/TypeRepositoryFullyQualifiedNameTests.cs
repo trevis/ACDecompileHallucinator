@@ -24,8 +24,8 @@ public class TypeRepositoryFullyQualifiedNameTests
     {
         // Arrange
         using var context = new TypeContext(_options);
-        using var repository = new TypeRepository(context);
-        
+        using var repository = new SqlTypeRepository(context);
+
         var type = new TypeModel
         {
             BaseName = "TestClass",
@@ -52,8 +52,8 @@ public class TypeRepositoryFullyQualifiedNameTests
     {
         // Arrange
         using var context = new TypeContext(_options);
-        using var repository = new TypeRepository(context);
-        
+        using var repository = new SqlTypeRepository(context);
+
         var type = new TypeModel
         {
             BaseName = "TestClass",
@@ -62,7 +62,7 @@ public class TypeRepositoryFullyQualifiedNameTests
         };
         // Set the stored fully qualified name before inserting
         type.StoredFullyQualifiedName = type.FullyQualifiedName;
-        
+
         var id = repository.InsertType(type);
         repository.SaveChanges(); // Save changes to commit the insert
         Assert.True(id > 0);
@@ -82,8 +82,8 @@ public class TypeRepositoryFullyQualifiedNameTests
     {
         // Arrange
         using var context = new TypeContext(_options);
-        using var repository = new TypeRepository(context);
-        
+        using var repository = new SqlTypeRepository(context);
+
         var type = new TypeModel
         {
             BaseName = "TestClass",
@@ -115,8 +115,8 @@ public class TypeRepositoryFullyQualifiedNameTests
     {
         // Arrange
         using var context = new TypeContext(_options);
-        using var repository = new TypeRepository(context);
-        
+        using var repository = new SqlTypeRepository(context);
+
         var type = new TypeModel
         {
             BaseName = "TestClass",
@@ -125,7 +125,7 @@ public class TypeRepositoryFullyQualifiedNameTests
         };
         // Ensure the stored fully qualified name is set
         type.StoredFullyQualifiedName = type.FullyQualifiedName;
-        
+
         var id = repository.InsertType(type);
         repository.SaveChanges(); // Save changes to commit the insert
         Assert.True(id > 0);
@@ -145,15 +145,15 @@ public class TypeRepositoryFullyQualifiedNameTests
     {
         // Arrange
         using var context = new TypeContext(_options);
-        using var repository = new TypeRepository(context);
-        
+        using var repository = new SqlTypeRepository(context);
+
         var type = new TypeModel
         {
             BaseName = "SmartArray",
             Namespace = "Container",
             Type = TypeType.Struct
         };
-        
+
         // Add a template argument
         type.TemplateArguments = new List<TypeTemplateArgument>
         {

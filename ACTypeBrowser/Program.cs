@@ -23,7 +23,8 @@ builder.Services.AddDbContext<TypeContext>(options =>
     options.UseSqlite(connectionString));
 
 // Repositories and Services
-builder.Services.AddScoped<ITypeRepository, TypeRepository>();
+builder.Services.AddScoped<SqlTypeRepository>();
+builder.Services.AddSingleton<ITypeRepository, InMemoryTypeRepository>();
 builder.Services.AddSingleton<ITypeHierarchyService, TypeHierarchyService>();
 builder.Services.AddScoped<HierarchyTreeBuilder>();
 
@@ -70,6 +71,13 @@ var app = builder.Build();
 
 // Pre-warm caches at startup for faster first page load
 Console.WriteLine("Pre-warming caches...");
+var typeRepo = app.Services.GetRequiredService<ITypeRepository>();
+if (typeRepo is InMemoryTypeRepository inMemoryRepo)
+{
+    inMemoryRepo.EnsureLoaded();
+    Console.WriteLine("  InMemoryTypeRepository loaded.");
+}
+
 var lookupCache = app.Services.GetRequiredService<TypeLookupCache>();
 lookupCache.EnsureLoaded();
 Console.WriteLine("  TypeLookupCache loaded.");

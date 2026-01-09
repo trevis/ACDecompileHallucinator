@@ -20,7 +20,7 @@ public class TypeRepositoryFunctionBodyTests
     {
         // Arrange
         using var context = CreateContext();
-        var repository = new TypeRepository(context);
+        var repository = new SqlTypeRepository(context);
 
         var type = new TypeModel
         {
@@ -61,7 +61,7 @@ public class TypeRepositoryFunctionBodyTests
         Assert.True(result.ContainsKey(type.Id));
         var bodies = result[type.Id];
         Assert.Single(bodies);
-        
+
         var fetchedBody = bodies.First();
         Assert.NotNull(fetchedBody.FunctionSignature);
         Assert.Equal("Method", fetchedBody.FunctionSignature.Name);
