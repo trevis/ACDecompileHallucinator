@@ -952,8 +952,8 @@ public static class ParsingUtilities
 
         // Check for the pointer-in-parens pattern followed by a parameter list
         // The name is optional: (*), (__cdecl *), (__cdecl *createMethod), (*myFunc), etc.
-        // We now support multiple asterisks for pointers to function pointers
-        var pattern = @"\(\s*(__thiscall|__stdcall|__cdecl|__fastcall)?\s*\*+\s*\w*\s*\)\s*\(";
+        // We now enforce the start and end of the string to avoid partial matches in template args
+        var pattern = @"^(.+?)\s*\(\s*(__thiscall|__stdcall|__cdecl|__fastcall)?\s*(\*+)\s*(\w*)\s*\)\s*\((.*?)?\)$";
         return Regex.IsMatch(trimmed, pattern);
     }
 

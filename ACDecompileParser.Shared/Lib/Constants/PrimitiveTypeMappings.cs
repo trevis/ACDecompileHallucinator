@@ -142,6 +142,12 @@ public static class PrimitiveTypeMappings
         if (string.IsNullOrWhiteSpace(cppType))
             return "void";
 
+        // Check for function pointer syntax directly
+        if (ParsingUtilities.IsFunctionPointerParameter(cppType))
+        {
+            return "System.IntPtr";
+        }
+
         // Normalize the type string first
         string normalized = ParsingUtilities.NormalizeTypeString(cppType);
 
@@ -421,12 +427,15 @@ public static class PrimitiveTypeMappings
     {
         var list = new List<string>();
         int depth = 0;
+        int parenDepth = 0;
         int start = 0;
         for (int i = 0; i < args.Length; i++)
         {
             if (args[i] == '<') depth++;
             else if (args[i] == '>') depth--;
-            else if (args[i] == ',' && depth == 0)
+            else if (args[i] == '(') parenDepth++;
+            else if (args[i] == ')') parenDepth--;
+            else if (args[i] == ',' && depth == 0 && parenDepth == 0)
             {
                 list.Add(args.Substring(start, i - start).Trim());
                 start = i + 1;
