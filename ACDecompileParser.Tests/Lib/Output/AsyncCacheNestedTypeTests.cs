@@ -49,7 +49,7 @@ public class AsyncCacheNestedTypeTests
         var optionsBuilder = new DbContextOptionsBuilder<TypeContext>();
         optionsBuilder.UseInMemoryDatabase(Guid.NewGuid().ToString());
         using var context = new TypeContext(optionsBuilder.Options);
-        using var repo = new TypeRepository(context);
+        using var repo = new SqlTypeRepository(context);
 
         // Create a temporary directory for header output
         string tempDir = Path.Combine(Path.GetTempPath(), "test_output_" + Guid.NewGuid().ToString());
@@ -131,7 +131,7 @@ public class AsyncCacheNestedTypeTests
         var optionsBuilder = new DbContextOptionsBuilder<TypeContext>();
         optionsBuilder.UseInMemoryDatabase(Guid.NewGuid().ToString());
         using var context = new TypeContext(optionsBuilder.Options);
-        using var repo = new TypeRepository(context);
+        using var repo = new SqlTypeRepository(context);
 
         // Act
         parser.Parse();
