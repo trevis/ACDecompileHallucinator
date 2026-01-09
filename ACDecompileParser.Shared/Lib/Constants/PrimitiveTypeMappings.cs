@@ -158,11 +158,7 @@ public static class PrimitiveTypeMappings
             }
 
             // Check if this is an unknown/unparsed pointer type
-            // Only apply this logic if the TypeReference has been resolved (attempted database lookup)
-            // If both ReferencedTypeId and ReferencedType are null, it means the reference was never resolved
-            // (e.g., during initial parsing), so we use default behavior
-            if (typeRef != null && typeRef.IsPointer &&
-                (typeRef.ReferencedTypeId.HasValue || typeRef.ReferencedType != null))
+            if (typeRef != null && typeRef.IsPointer)
             {
                 bool isUnknownType = typeRef.ReferencedTypeId == null;
                 bool isIgnoredType = typeRef.ReferencedType?.IsIgnored == true;
@@ -232,7 +228,7 @@ public static class PrimitiveTypeMappings
         string normalized = ParsingUtilities.NormalizeTypeString(cppType);
 
         // Check if this is an unknown/unparsed pointer type first
-        if (typeRef != null && normalized.EndsWith("*"))
+        if (typeRef != null && typeRef.IsPointer)
         {
             bool isUnknownType = typeRef.ReferencedTypeId == null;
             bool isIgnoredType = typeRef.ReferencedType?.IsIgnored == true;
