@@ -10,7 +10,7 @@ public class TypeHierarchyService : ITypeHierarchyService
         List<TypeModel> typeModels,
         HierarchyRuleEngine? ruleEngine = null)
     {
-        var groupedTypes = new Dictionary<(string, string), List<TypeModel>>();
+        var groupedTypes = new Dictionary<(string, string), List<TypeModel>>(new CaseInsensitiveTupleComparer());
 
         // Group all types by their base type path and the physical path calculated by rules
         foreach (var typeModel in typeModels)
@@ -237,9 +237,11 @@ public class TypeHierarchyService : ITypeHierarchyService
                 .ToList();
         }
     }
+
     private class CaseInsensitiveTupleComparer : IEqualityComparer<(string outputFileName, string physicalPath)>
     {
-        public bool Equals((string outputFileName, string physicalPath) x, (string outputFileName, string physicalPath) y)
+        public bool Equals((string outputFileName, string physicalPath) x,
+            (string outputFileName, string physicalPath) y)
         {
             return string.Equals(x.outputFileName, y.outputFileName, StringComparison.OrdinalIgnoreCase) &&
                    string.Equals(x.physicalPath, y.physicalPath, StringComparison.OrdinalIgnoreCase);

@@ -78,6 +78,7 @@ public class TypeHierarchyServiceTests
         Assert.Equal("TestNamespace", groupKey.physicalPath);
         Assert.Equal(2, result[groupKey].Count);
     }
+
     [Fact]
     public void GroupTypes_Distinguishes_SameName_DifferentNamespace()
     {
@@ -127,6 +128,7 @@ public class TypeHierarchyServiceTests
         Assert.Contains(child, ns1Group.Value);
         Assert.DoesNotContain(child, ns2Group.Value);
     }
+
     [Fact]
     public void GroupTypes_ShouldGroup_SameName_DifferentCase()
     {
@@ -154,12 +156,10 @@ public class TypeHierarchyServiceTests
         var result = service.GroupTypesByBaseNameAndNamespace(types);
 
         // Assert
-        // Currently, it should return 2 groups because dictionary keys are case-sensitive
-        // We want it to eventually return 1 group
-
-        // This test check the CURRENT behavior (which we want to CHANGE)
-        // Adjust the assertion based on whether we are testing current or desired state.
-        // I will assert 2 for now to confirm reproduction.
-        Assert.Equal(2, result.Count);
+        // Now it should return 1 group because dictionary keys are case-insensitive
+        Assert.Single(result);
+        var groupKey = result.Keys.First();
+        Assert.Equal("ObjectInfo", groupKey.outputFileName);
+        Assert.Equal(2, result[groupKey].Count);
     }
 }
