@@ -803,7 +803,7 @@ public class CSharpBindingsGenerator
 
             string line =
                 $"{indent}public static {returnType} {methodName}({paramsStr}) => {GetFullyQualifiedName(sourceType)}.{methodName}({callArgsStr});";
-            AppendLineCheckForUserPurge(sb, line);
+            AppendLineCheckForFiltering(sb, line, methodName);
         }
         else
         {
@@ -819,7 +819,7 @@ public class CSharpBindingsGenerator
                     $"{indent}public static {returnType} {methodName}({paramsStr}) => ((delegate* unmanaged[{callingConv}]<{delegateTypesStr}>){offset})({callArgsStr});";
             }
 
-            AppendLineCheckForUserPurge(sb, line);
+            AppendLineCheckForFiltering(sb, line, methodName);
         }
     }
 
@@ -874,19 +874,19 @@ public class CSharpBindingsGenerator
 
             string line =
                 $"{indent}public {returnType} {methodName}({paramsStr}) => {baseField}.{methodName}({wrapperCallArgsStr});";
-            AppendLineCheckForUserPurge(sb, line);
+            AppendLineCheckForFiltering(sb, line, methodName);
         }
         else
         {
             string line =
                 $"{indent}public {returnType} {methodName}({paramsStr}) => ((delegate* unmanaged[Thiscall]<{delegateTypesStr}>){offset})({callArgsStr});";
-            AppendLineCheckForUserPurge(sb, line);
+            AppendLineCheckForFiltering(sb, line, methodName);
         }
     }
 
-    private void AppendLineCheckForUserPurge(System.Text.StringBuilder sb, string line)
+    private void AppendLineCheckForFiltering(System.Text.StringBuilder sb, string line, string methodName)
     {
-        if (line.Contains("__userpurge"))
+        if (line.Contains("__userpurge") || methodName.StartsWith("operator"))
         {
             sb.AppendLine("// " + line);
         }
