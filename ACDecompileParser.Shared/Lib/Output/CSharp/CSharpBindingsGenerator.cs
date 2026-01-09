@@ -1,6 +1,7 @@
 using ACDecompileParser.Shared.Lib.Constants;
 using ACDecompileParser.Shared.Lib.Models;
 using ACDecompileParser.Shared.Lib.Storage;
+using System.Runtime.CompilerServices;
 
 namespace ACDecompileParser.Shared.Lib.Output.CSharp;
 
@@ -405,13 +406,16 @@ public class CSharpBindingsGenerator
     private bool IsConstructor(FunctionBodyModel fb, string typeName)
     {
         string name = ExtractMethodName(fb.FullyQualifiedName);
-        return name == typeName;
+        return name == typeName || name.StartsWith($"{typeName}<");
     }
 
     private bool IsDestructor(FunctionBodyModel fb, string typeName)
     {
         string name = ExtractMethodName(fb.FullyQualifiedName);
-        return name == $"~{typeName}";
+        if (!name.StartsWith("~")) return false;
+
+        string dtorName = name.Substring(1);
+        return dtorName == typeName || dtorName.StartsWith($"{typeName}<");
     }
 
     private void GenerateCSharpConstructor(FunctionBodyModel ctor, string typeName, System.Text.StringBuilder sb,
@@ -564,14 +568,32 @@ public class CSharpBindingsGenerator
                         return;
                     }
 
-                    // For non-primitive arrays, use pointer
-                    // Map the base type and append *
-                    string mappedBaseType =
-                        PrimitiveTypeMappings.MapType(member.TypeString ?? "void", tr);
+                    // For non-primitive arrays, use fixed backing buffer + helper property
+                    string propertyName = PrimitiveTypeMappings.SanitizeIdentifier(member.Name);
+                    string rawFieldName = $"{propertyName}_Raw";
+                    int size = tr.ArraySize.Value;
 
-                    // Explicitly reconstruct pointer type
-                    csType = mappedBaseType.TrimEnd('*') + "*";
-                    comment = $" // array[{tr.ArraySize.Value}]";
+                    if (tr.IsPointer)
+                    {
+                        // Array of pointers: public fixed byte name_Raw[Size * 4];
+                        sb.AppendLine($"{indent}public fixed byte {rawFieldName}[{size} * 4];");
+                        // Helper: public T** name => (T**)System.Runtime.CompilerServices.Unsafe.AsPointer(ref name_Raw[0]);
+                        // MapType(T*) returns T*
+                        string pointerType = PrimitiveTypeMappings.MapType(member.TypeString ?? "void", tr);
+                        sb.AppendLine(
+                            $"{indent}public {pointerType}* {propertyName} => ({pointerType}*)System.Runtime.CompilerServices.Unsafe.AsPointer(ref {rawFieldName}[0]);");
+                    }
+                    else
+                    {
+                        // Array of structs: public fixed byte name_Raw[Size * sizeof(T)];
+                        string baseTypeFqn = PrimitiveTypeMappings.MapType(member.TypeString ?? "void", tr);
+                        sb.AppendLine($"{indent}public fixed byte {rawFieldName}[{size} * sizeof({baseTypeFqn})];");
+                        // Helper: public T* name => (T*)System.Runtime.CompilerServices.Unsafe.AsPointer(ref name_Raw[0]);
+                        sb.AppendLine(
+                            $"{indent}public {baseTypeFqn}* {propertyName} => ({baseTypeFqn}*)System.Runtime.CompilerServices.Unsafe.AsPointer(ref {rawFieldName}[0]);");
+                    }
+
+                    return;
                 }
             }
         }
