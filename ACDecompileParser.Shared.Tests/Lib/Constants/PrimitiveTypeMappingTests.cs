@@ -53,4 +53,13 @@ public class PrimitiveTypeMappingTests
         var result = PrimitiveTypeMappings.WrapPointerForGeneric(input);
         Assert.Equal(expected, result);
     }
+    [Theory]
+    [InlineData("Type$With$Dollars", "Type_With_Dollars")]
+    [InlineData("// local variable allocation has failed, the output may be wrong! bool", "bool")]
+    [InlineData("SomeType // local variable allocation has failed, the output may be wrong!", "SomeType")]
+    public void CleanTypeName_CleansSpecialCharactersAndArtifacts(string input, string expected)
+    {
+        var result = PrimitiveTypeMappings.CleanTypeName(input);
+        Assert.Equal(expected, result);
+    }
 }
