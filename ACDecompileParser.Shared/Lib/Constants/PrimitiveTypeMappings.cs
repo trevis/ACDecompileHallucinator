@@ -101,6 +101,10 @@ public static class PrimitiveTypeMappings
         {  "sockaddr_in", "int" },
         { "LPBYTE", "byte*" },
         { "HKEY", "int" },
+        { "HWND__", "int"},
+        { "HINSTANCE__", "int" },
+        { "HACCEL__", "int" },
+        { "HICON__", "int" },
         { "LPCSTR", "sbyte*"},
         { "_iobuf", "byte"}
     };

@@ -47,9 +47,9 @@ public static class IgnoreFilter
         "FallocPool", "IntrusiveLFData", "Intrusive_MW", "ANON_OBJECT_HEADER",
         "ANSIColorStatus", "ARRAY_INFO", "CHid'", "CBase", "CDeferredCommand", "IDeferredCommand",
         "CDispParams", "CDynamicOutputPin", "CEnum", "CMedia", "CBasicAudio", "CGenericList",
-        "CHid", "CMemAllocator", "CPosPassThru", "CRenderPosPassThru", "CSourceSeeking",
+        "CHid", "CMemAllocator", "CPosPassThru", "CRendererPosPassThru", "CSourceSeeking",
         "FT", "InteractiveOutputHandler", "LogTextTypeEnumMapper", "LookFile", "ProjectSettings",
-        "Resource", "UDATE"
+        "Resource", "UDATE", "CRendererInputPin", "CTextureRenderer", "CCmdQueue", "CSourcePosition"
     };
 
     public static readonly HashSet<string> IgnoreSuffixes = new HashSet<string>
@@ -64,7 +64,8 @@ public static class IgnoreFilter
         "tagRECT", "_D3DPOOL", "_D3DFORMAT", "tWAVEFORMATEX", "IOptionChangeHandler",
         "_PUBLICKEYSTRUC", "_SECURITY_DESCRIPTOR", "_RTL_CRITICAL_SECTION", "_MMCKINFO",
         "CBaseQualities", "CBaseQualities_vtbl", "CBasePiece", "tagBLOB", "IObjectFactory",
-        "_D3DLIGHT9", "_D3DLIGHTTYPE", "_D3DCOLORVALUE", "_D3DVECTOR"
+        "_D3DLIGHT9", "_D3DLIGHTTYPE", "_D3DCOLORVALUE", "_D3DVECTOR", "ICIDM", "ICIDM_vtbl",
+        "IResourceNotify", "_WSABUF", "SCARD_T0_COMMAND", "HIDREPORTINFO", "_D3DMATERIAL9"
     };
 
     /// <summary>

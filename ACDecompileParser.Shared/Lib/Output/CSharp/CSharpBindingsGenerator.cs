@@ -787,37 +787,6 @@ public class CSharpBindingsGenerator
 
         if (sourceType.Id != currentType.Id)
         {
-            // Pulled up static method
-            // public static int Set3DView(int x, int y) => BaseClass_Render.Set3DView(x, y);
-            // Wait, static methods are called on the TYPE, not the field.
-            // But existing code uses `BaseClass_Render` field for everything?
-            // User example: `public int Set3DView(int x, int y) => BaseClass_Render.Set3DView(x, y);`
-            // `Set3DView` defined as `__cdecl` in struct Render (static).
-            // `BaseClass_Render` is a field. 
-            // Calling static method on instance/field is NOT valid in C# (access via type name).
-            // However, `BaseClass_Render` type name is `Render`.
-            // The FIELD name is `BaseClass_Render`.
-            // If user meant `Render.Set3DView(x, y)` then code should be `Render.Set3DView`.
-            // BUT `BaseClass_Render` field logic implies `ACRender` has a member called `BaseClass_Render`.
-            // The user example shows: `public int Set3DView(int x, int y) => BaseClass_Render.Set3DView(x, y);`
-            // This works IF `Set3DView` is an INSTANCE method.
-            // But `__cdecl` usually implies static.
-            // Existing `GenerateStaticMethod` generates `public static ...`.
-            // IF `Set3DView` is static in `Render`, `ACRender.Set3DView` should call `Render.Set3DView`.
-            // User example says: `public int Set3DView(int x, int y)` (INSTANCE method in ACRender) calling `BaseClass_Render.Set3DView`.
-            // This implies the pulled up method becomes an INSTANCE method that delegates?
-            // OR `Set3DView` in Render was generated as instance?
-            // Existing code `GenerateStruct` -> `GenerateMethod` -> `isStatic` check changes generation.
-            // If `__cdecl`, `isStatic` is true. `Render` has `public static int Set3DView`.
-            // `ACRender` wrapper: `public int Set3DView(...) => Render.Set3DView(...)`.
-            // BUT user prompt: `BaseClass_Render.Set3DView(x, y)` where `BaseClass_Render` is the base class field.
-            // If `BaseClass_Render` refers to the FIELD, you cannot call a static method on it in C#.
-            // You must call `Render.Set3DView`.
-            // Maybe user made a mistake in the example and meant `Render.Set3DView`?
-            // OR `BaseClass_Render` is a property returning type? No.
-            // I will assume `Render.Set3DView` is the intent for static methods.
-            // So: `public static int Set3DView(...) => SourceType.Set3DView(...)`.
-
             string line =
                 $"{indent}public static {returnType} {methodName}({paramsStr}) => {GetFullyQualifiedName(sourceType)}.{methodName}({callArgsStr});";
             AppendLineCheckForFiltering(sb, line, methodName);
