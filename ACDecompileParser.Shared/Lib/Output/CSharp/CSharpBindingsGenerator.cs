@@ -667,6 +667,12 @@ public class CSharpBindingsGenerator
         if (IsConstructor(fb, sourceType.BaseName)) methodName = "_ConstructorInternal";
         else if (IsDestructor(fb, sourceType.BaseName)) methodName = "_DestructorInternal";
 
+        // Flatten generic identifiers in method name (e.g. Method<T> -> Method__T)
+        if (methodName.Contains('<'))
+        {
+            methodName = FlattenGenericMethodName(methodName);
+        }
+
         // Get parameters
         var parameters = sig.Parameters?.OrderBy(p => p.Position).ToList() ?? new List<FunctionParamModel>();
 
@@ -952,5 +958,21 @@ public class CSharpBindingsGenerator
         }
 
         return address;
+    }
+
+    private static string FlattenGenericMethodName(string name)
+    {
+        // Simple flattening strategy consistent with PrimitiveTypeMappings.ToIdentifier
+        // Method<T> -> Method__T
+
+        // Remove spaces
+        name = name.Replace(" ", "");
+
+        // Replace brackets and separators
+        return name
+            .Replace("::", "_")
+            .Replace("<", "__")
+            .Replace(">", "")
+            .Replace(",", "__");
     }
 }

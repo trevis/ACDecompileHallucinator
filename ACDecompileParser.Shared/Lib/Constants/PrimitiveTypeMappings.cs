@@ -98,6 +98,7 @@ public static class PrimitiveTypeMappings
         { "void*", "System.IntPtr" },
         { "_DWORD", "int" },
         { "HRESULT", "int" },
+        {  "sockaddr_in", "int" }
     };
 
     /// <summary>
@@ -203,6 +204,13 @@ public static class PrimitiveTypeMappings
         if (CppToCSharp.TryGetValue(baseType, out string? csType))
         {
             return csType;
+        }
+
+        // Special handling for _STL::vector -> long
+        if (baseType.StartsWith("_STL::vector<") || baseType.StartsWith("struct _STL::vector<") ||
+            baseType.Equals("_STL::vector", StringComparison.OrdinalIgnoreCase))
+        {
+            return "long";
         }
 
         // Check for generics

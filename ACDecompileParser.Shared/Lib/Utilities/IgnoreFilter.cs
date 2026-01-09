@@ -46,7 +46,10 @@ public static class IgnoreFilter
         "CMsg", "CEm", "CEd", "CAutoUsingOutputPin", "BIDI_TYPE", "IMPORT_OBJECT_HEADER",
         "FallocPool", "IntrusiveLFData", "Intrusive_MW", "ANON_OBJECT_HEADER",
         "ANSIColorStatus", "ARRAY_INFO", "CHid'", "CBase", "CDeferredCommand", "IDeferredCommand",
-        "CDispParams", "CDynamicOutputPin", "CEnum"
+        "CDispParams", "CDynamicOutputPin", "CEnum", "CMedia", "CBasicAudio", "CGenericList",
+        "CHid", "CMemAllocator", "CPosPassThru", "CRenderPosPassThru", "CSourceSeeking",
+        "FT", "InteractiveOutputHandler", "LogTextTypeEnumMapper", "LookFile", "ProjectSettings",
+        "Resource", "UDATE"
     };
 
     public static readonly HashSet<string> IgnoreSuffixes = new HashSet<string>
@@ -58,7 +61,8 @@ public static class IgnoreFilter
     {
         "_IDClass", "D3DPolyRender", "_GUID", "IFileNodeName", "IFileNodeName_vtbl",
         "_tagDataID", "_tag", "_tagVersionHandle", "_tagCellID", "tagPOINT", "CEmoteTable",
-        "tagRECT", "_D3DPOOL", "_D3DFORMAT", "tWAVEFORMATEX"
+        "tagRECT", "_D3DPOOL", "_D3DFORMAT", "tWAVEFORMATEX", "IOptionChangeHandler",
+        "_PUBLICKEYSTRUC", "_SECURITY_DESCRIPTOR", "_RTL_CRITICAL_SECTION", "_MMCKINFO"
     };
 
     /// <summary>
