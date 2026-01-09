@@ -20,7 +20,7 @@ public static class IgnoreFilter
         "fstream", "fd_", "exception", "ct_data_s", "config_s", "_com", "XMLDOM",
         "URL_COMPONENTSW", "TypeDescriptor", "SHEPHANDLE", "QzCComPtr", "RASIPADDR",
         "QOS_OBJECT_HDR", "POWER_ACTION_POLICY", "PMD", "NUMPARSE", "MENUITEMTEMPLATE",
-        "MIDIFILEHDR", "D3D", "AVL", "z_stream_s", "static_tree_desc_s", "stat", "pvalue",
+        "MIDIFILEHDR", "AVL", "z_stream_s", "static_tree_desc_s", "stat", "pvalue",
         "TGA", "TEMPEVENT", "IWinInet", "IWaitMultiple", "IXTLRuntime", "IType", "IStdMarshalInfo",
         "IROTData", "IPrintDialog", "INTRACKSTATE", "INFILESTATE", "IMoniker", "ILBM",
         "ICD", "ICIDM", "IBind", "IAsync", "IAuthenticate", "IAdvice", "IAddr",
@@ -56,7 +56,8 @@ public static class IgnoreFilter
     public static readonly HashSet<string> Whitelist = new HashSet<string>
     {
         "_IDClass", "D3DPolyRender", "_GUID", "IFileNodeName", "IFileNodeName_vtbl",
-        "_tagDataID", "_tag", "_tagVersionHandle", "_tagCellID", "tagPOINT", "CEmoteTable"
+        "_tagDataID", "_tag", "_tagVersionHandle", "_tagCellID", "tagPOINT", "CEmoteTable",
+        "tagRECT"
     };
 
     /// <summary>

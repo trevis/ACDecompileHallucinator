@@ -184,7 +184,9 @@ public static class PrimitiveTypeMappings
         // Strip const and other qualifiers used for mapping lookup
         string baseType = normalized
             .Replace("const ", "")
+            .Replace(" const", "")
             .Replace("volatile ", "")
+            .Replace(" volatile", "")
             .Replace("struct ", "")
             .Replace("enum ", "")
             .Replace("union ", "")
