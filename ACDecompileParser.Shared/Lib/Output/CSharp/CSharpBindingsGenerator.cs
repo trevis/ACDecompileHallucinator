@@ -378,25 +378,26 @@ public class CSharpBindingsGenerator
 
         foreach (var bt in type.BaseTypes)
         {
-            // Try to resolve the related type
+            // RelatedType should already be loaded via GetBaseTypesForMultipleTypes()
+            // which includes .Include(ti => ti.RelatedType)
             TypeModel? related = bt.RelatedType;
-            if (related == null && _repository != null)
+
+            // If null, create a minimal stub to avoid failures
+            // (This shouldn't happen if data is pre-loaded correctly in CSharpGroupProcessor)
+            if (related == null)
             {
-                // Attempt to load if missing. 
-                // Note: Ideally TypeModel is fully loaded. 
-                // If bt.RelatedTypeId is available, we might assume it's loaded if passed in context, 
-                // but here we might need to rely on what we have.
-                // For now, skip if null to avoid N+1 query inside loop if not careful, 
-                // but implementation requires it.
-                if (bt.RelatedTypeId > 0)
-                    related = _repository.GetTypesForGroup(bt.RelatedTypeString, type.Namespace)
-                        .FirstOrDefault(); // This is rough, ID lookup better if exposed
+                related = new TypeModel
+                {
+                    BaseName = bt.RelatedTypeString ?? "Unknown",
+                    Namespace = type.Namespace
+                    // Note: FullyQualifiedName is a computed property, don't set it directly
+                };
             }
 
-            if (related != null)
+            // Use FullyQualifiedName as key to avoid name collisions across namespaces
+            string key = related.FullyQualifiedName ?? bt.RelatedTypeString ?? "Unknown";
+            if (!map.ContainsKey(key))
             {
-                // Use FullyQualifiedName as key to avoid name collisions across namespaces
-                string key = related.FullyQualifiedName;
                 map[key] = related;
             }
         }

@@ -652,11 +652,12 @@ public class OffsetCalculationService
     private void LoadInheritanceCache(IEnumerable<TypeModel> structTypes)
     {
         _inheritanceCache.Clear();
-        foreach (var structType in structTypes)
-        {
-            var baseTypes = _repository.GetBaseTypesWithRelatedTypes(structType.Id);
-            _inheritanceCache[structType.Id] = baseTypes.ToList();
-        }
+
+        // Extract all type IDs
+        var typeIds = structTypes.Select(t => t.Id).ToList();
+
+        // Bulk fetch all inheritance relationships in a single query
+        _inheritanceCache = _repository.GetBaseTypesForMultipleTypes(typeIds);
     }
 
     /// <summary>
@@ -665,11 +666,12 @@ public class OffsetCalculationService
     private void LoadStructMembersCache(IEnumerable<TypeModel> structTypes)
     {
         _structMembersCache.Clear();
-        foreach (var structType in structTypes)
-        {
-            var members = _repository.GetStructMembersWithRelatedTypes(structType.Id).ToList();
-            _structMembersCache[structType.Id] = members;
-        }
+
+        // Extract all type IDs
+        var typeIds = structTypes.Select(t => t.Id).ToList();
+
+        // Bulk fetch all struct members in a single query
+        _structMembersCache = _repository.GetStructMembersForMultipleTypes(typeIds);
     }
 
     /// <summary>

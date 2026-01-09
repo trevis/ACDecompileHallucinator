@@ -148,9 +148,7 @@ public class TypeParserAdditionalTests
         // Act
         var result = TypeParser.ParseType("char* const");
 
-        // Note: This is a limitation of the current implementation - it doesn't handle "type* const" correctly
-        // The current implementation only handles "const type*" format
-        Assert.Equal("char* const", result.BaseName);
+        Assert.Equal("char", result.BaseName);
     }
 
     [Fact]

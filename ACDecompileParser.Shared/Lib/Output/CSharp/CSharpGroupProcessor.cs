@@ -23,6 +23,7 @@ public class CSharpGroupProcessor
         _hierarchyService = hierarchyService ?? new TypeHierarchyService();
         _generator = new CSharpBindingsGenerator(repository);
     }
+
     /// <summary>
     /// Generates C# binding code for a group of types as a string.
     /// </summary>
@@ -31,56 +32,21 @@ public class CSharpGroupProcessor
         if (types == null || !types.Any())
             return string.Empty;
 
-        // Pre-load all base types and members in batch (similar to TypeGroupProcessor)
-        if (_repository != null)
-        {
-            var typeIds = types.Select(t => t.Id).ToList();
-            var allBaseTypes = _repository.GetBaseTypesForMultipleTypes(typeIds);
-            var allMembers = _repository.GetStructMembersForMultipleTypes(typeIds);
-            var allBodies = _repository.GetFunctionBodiesForMultipleTypes(typeIds);
+        var sw = System.Diagnostics.Stopwatch.StartNew();
 
-            // Fetch static variables in batch
-            var allStaticVariables = new Dictionary<int, List<StaticVariableModel>>();
-            foreach (var typeId in typeIds)
-            {
-                var svs = _repository.GetStaticVariablesForType(typeId);
-                if (svs.Any())
-                {
-                    allStaticVariables[typeId] = svs;
-                }
-            }
-
-            // Attach to types so generators find pre-loaded data
-            foreach (var type in types)
-            {
-                if (allBaseTypes.TryGetValue(type.Id, out var baseTypes))
-                    type.BaseTypes = baseTypes;
-                else if (type.BaseTypes == null)
-                    type.BaseTypes = new List<TypeInheritance>();
-
-                if (allMembers.TryGetValue(type.Id, out var members))
-                    type.StructMembers = members;
-                else if (type.StructMembers == null)
-                    type.StructMembers = new List<StructMemberModel>();
-
-                if (allBodies.TryGetValue(type.Id, out var bodies))
-                    type.FunctionBodies = bodies;
-                else if (type.FunctionBodies == null)
-                    type.FunctionBodies = new List<FunctionBodyModel>();
-
-                if (allStaticVariables.TryGetValue(type.Id, out var staticVars))
-                    type.StaticVariables = staticVars;
-                else if (type.StaticVariables == null)
-                    type.StaticVariables = new List<StaticVariableModel>();
-            }
-        }
+        // Data is now pre-loaded in CSharpFileOutputGenerator, no need to query here!
+        // The TypeModels already have BaseTypes, StructMembers, FunctionBodies, and StaticVariables attached
 
         // Link parent/child relationships for nested type output
+        sw.Restart();
         _hierarchyService.LinkNestedTypes(types);
+        var linkMs = sw.ElapsedMilliseconds;
 
+        string result;
+        sw.Restart();
         if (includeNamespace)
         {
-            return _generator.GenerateWithNamespace(types);
+            result = _generator.GenerateWithNamespace(types);
         }
         else
         {
@@ -89,9 +55,17 @@ public class CSharpGroupProcessor
             {
                 sb.AppendLine(_generator.Generate(type));
             }
-            return sb.ToString();
+
+            result = sb.ToString();
         }
+
+        var genMs = sw.ElapsedMilliseconds;
+
+        Console.WriteLine($"  [CSharpGroupProcessor] Link: {linkMs}ms, Generate: {genMs}ms");
+
+        return result;
     }
+
     /// <summary>
     /// Generates C# binding code for a single type.
     /// </summary>
