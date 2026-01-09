@@ -160,4 +160,30 @@ public class FunctionBodyParserTests
 
         Assert.Empty(results);
     }
+    [Fact]
+    public void Parse_DecompilerFailComment_ReturnsCorrectModel()
+    {
+        var input = new List<string>
+        {
+            "//----- (00467040) --------------------------------------------------------",
+            "// local variable allocation has failed, the output may be wrong!",
+            "bool __thiscall UIElement_Text::MoveBeginEndLine(",
+            "        UIElement_Text *this,",
+            "        unsigned int i_bBegin,",
+            "        unsigned int i_nStart,",
+            "        unsigned int *o_nPos)",
+            "{",
+            "  return result;",
+            "}"
+        };
+
+        var results = FunctionBodyParser.Parse(input);
+
+        Assert.Single(results);
+        var func = results[0];
+        Assert.Equal("UIElement_Text::MoveBeginEndLine", func.FullyQualifiedName);
+        Assert.NotNull(func.FunctionSignature);
+        Assert.Equal("bool", func.FunctionSignature!.ReturnType);
+        Assert.Equal(4, func.FunctionSignature!.Parameters.Count);
+    }
 }
