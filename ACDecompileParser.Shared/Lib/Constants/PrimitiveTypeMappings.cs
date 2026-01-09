@@ -98,7 +98,10 @@ public static class PrimitiveTypeMappings
         { "void*", "System.IntPtr" },
         { "_DWORD", "int" },
         { "HRESULT", "int" },
-        {  "sockaddr_in", "int" }
+        {  "sockaddr_in", "int" },
+        { "LPBYTE", "byte*" },
+        { "HKEY", "int" },
+        { "LPCSTR", "sbyte*"},
     };
 
     /// <summary>

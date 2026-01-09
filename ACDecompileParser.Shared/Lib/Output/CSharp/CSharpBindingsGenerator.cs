@@ -178,7 +178,16 @@ public class CSharpBindingsGenerator
             {
                 TypeModel fallbackRelated = new TypeModel { BaseName = bt.RelatedTypeString ?? "Unknown" };
                 TypeModel resolvedType = bt.RelatedType ?? fallbackRelated;
-                string baseTypeName = GetFullyQualifiedName(resolvedType);
+                // Use the specific instantiation string for templates to ensure flattening
+                string baseTypeName;
+                if (!string.IsNullOrEmpty(bt.RelatedTypeString) && bt.RelatedTypeString.Contains('<'))
+                {
+                    baseTypeName = PrimitiveTypeMappings.MapType(bt.RelatedTypeString);
+                }
+                else
+                {
+                    baseTypeName = GetFullyQualifiedName(resolvedType);
+                }
 
                 // Use a consistent sanitized field name based on FQN
                 string rawFqn = resolvedType.FullyQualifiedName;
