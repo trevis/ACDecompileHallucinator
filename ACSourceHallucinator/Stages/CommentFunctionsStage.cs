@@ -1,3 +1,4 @@
+using System.Xml.Linq;
 using ACDecompileParser.Shared.Lib.Storage;
 using ACSourceHallucinator.Data.Repositories;
 using ACSourceHallucinator.Enums;
@@ -95,16 +96,31 @@ public class CommentFunctionsStage : StageBase
             };
         }
 
-        if (response.Length < 10)
+        try
+        {
+            // Wrap in a root element to allow multiple top-level elements like <summary> and <param>
+            var wrappedResponse = $"<root>{response}</root>";
+            var xml = XElement.Parse(wrappedResponse);
+
+            if (xml.Element("summary") == null)
+            {
+                return new VerificationResult
+                {
+                    IsValid = false,
+                    ErrorMessage = "Missing <summary> tag"
+                };
+            }
+
+            return new VerificationResult { IsValid = true };
+        }
+        catch (Exception ex)
         {
             return new VerificationResult
             {
                 IsValid = false,
-                ErrorMessage = "Response too short (less than 10 characters)"
+                ErrorMessage = $"Invalid XML format: {ex.Message}"
             };
         }
-
-        return new VerificationResult { IsValid = true };
     }
 
     protected override bool RequiresLlmVerification => true;
@@ -122,7 +138,7 @@ public class CommentFunctionsStage : StageBase
             ct);
 
         return
-            $@"You are a code review assistant. Verify whether the following comment accurately describes the function AND follows the provided guidelines.
+            $@"You are a code review assistant. Verify whether the following XML documentation comment accurately describes the function AND follows the provided guidelines.
 
 === GUIDELINES ===
 {SystemPrompt}
@@ -146,17 +162,17 @@ Only respond with the JSON object, no other text.";
     }
 
     private const string SystemPrompt =
-        @"You are an expert C++ code analyst. Your task is to generate a concise, informative comment for decompiled C++ functions.
+        @"You are an expert C++ code analyst. Your task is to generate valid XML documentation comments for decompiled C++ functions, following C# xmldoc conventions.
 
 Guidelines:
-- Focus on WHAT the function does, not HOW it does it
-- Mention key parameters and return values if relevant
-- Keep comments to 1-4 sentences
-- Do not include code formatting or markdown
-- Do not start with ""This function"" - be direct
-- If the purpose is unclear, describe the observable behavior
-
-Output only the comment text, nothing else.";
+- Use <summary> to describe WHAT the function does concisely (1-3 sentences).
+- Use <param name=""parameterName""> to describe each parameter if relevant.
+- Use <returns> to describe the return value if relevant.
+- Focus on behavior and purpose, not implementation details.
+- Do not start descriptions with ""This function"" - be direct.
+- The output should contain the XML tags themselves (e.g., <summary>, <param>, <returns>).
+- Multiple top-level tags are allowed and expected (e.g., a <summary> followed by several <param> tags). This is valid for xmldoc.
+- Do not include any other text or markdown blocks, only the XML content.";
 
     private static class FewShotExamples
     {
@@ -167,7 +183,8 @@ Output only the comment text, nothing else.";
 }";
 
         public const string FunctionOutput1 =
-            "Updates the player's position based on current velocity and elapsed time using simple Euler integration.";
+            @"<summary>Updates the player's position based on current velocity and elapsed time using simple Euler integration.</summary>
+<param name=""deltaTime"">The time elapsed since the last update.</param>";
 
         public const string FunctionInput2 = @"bool InventoryManager::AddItem(Item* item, int quantity) {
     if (item == nullptr || quantity <= 0) return false;
@@ -181,6 +198,9 @@ Output only the comment text, nothing else.";
 }";
 
         public const string FunctionOutput2 =
-            "Adds the specified quantity of an item to the inventory. Stacks with existing items if present, otherwise creates a new inventory slot. Returns false if item is null or quantity is invalid.";
+            @"<summary>Adds the specified quantity of an item to the inventory, stacking with existing items if present.</summary>
+<param name=""item"">The item to add.</param>
+<param name=""quantity"">The number of items to add.</param>
+<returns>True if the item was successfully added; otherwise, false if the item is null or quantity is invalid.</returns>";
     }
 }
