@@ -12,7 +12,6 @@ using ACSourceHallucinator.Tui;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Spectre.Console;
 
 // Assumes TypeContext is from the shared library
@@ -29,7 +28,7 @@ public static class Program
         var sourceDbOption = new Option<string>(
                 "--source-db",
                 "Path to the source type database")
-            { IsRequired = true };
+        { IsRequired = true };
 
         var hallucinatorDbOption = new Option<string>(
             "--hallucinator-db",
@@ -44,7 +43,7 @@ public static class Program
         var modelOption = new Option<string>(
                 "--model",
                 "LLM model name")
-            { IsRequired = true };
+        { IsRequired = true };
 
         var maxTokensOption = new Option<int>(
             "--max-tokens",
@@ -74,6 +73,10 @@ public static class Program
             "--debug-struct",
             "Process only a single struct by FullyQualifiedName");
 
+        var forceOption = new Option<bool>(
+            "--force",
+            "Regenerate all stage results even if they are already in the database");
+
         rootCommand.AddOption(sourceDbOption);
         rootCommand.AddOption(hallucinatorDbOption);
         rootCommand.AddOption(llmUrlOption);
@@ -84,6 +87,7 @@ public static class Program
         rootCommand.AddOption(maxRetriesOption);
         rootCommand.AddOption(skipCacheOption);
         rootCommand.AddOption(debugStructOption);
+        rootCommand.AddOption(forceOption);
 
         rootCommand.SetHandler(async (context) =>
         {
@@ -98,7 +102,8 @@ public static class Program
                 TimeoutMinutes = context.ParseResult.GetValueForOption(timeoutOption),
                 MaxRetries = context.ParseResult.GetValueForOption(maxRetriesOption),
                 SkipCache = context.ParseResult.GetValueForOption(skipCacheOption),
-                DebugStructFqn = context.ParseResult.GetValueForOption(debugStructOption)
+                DebugStructFqn = context.ParseResult.GetValueForOption(debugStructOption),
+                ForceRegeneration = context.ParseResult.GetValueForOption(forceOption)
             };
 
             await RunPipelineAsync(options, context.GetCancellationToken());
@@ -185,13 +190,14 @@ public static class Program
         {
             DebugFilterFqn = options.DebugStructFqn,
             SkipCache = options.SkipCache,
+            ForceRegeneration = options.ForceRegeneration,
             MaxRetries = options.MaxRetries,
             Model = options.LlmModel
         };
         services.AddSingleton(pipelineOptions);
 
         // TUI
-        services.AddSingleton<IAnsiConsole>(AnsiConsole.Console);
+        services.AddSingleton(AnsiConsole.Console);
         services.AddScoped<PipelineTui>();
 
         return services.BuildServiceProvider();
