@@ -663,6 +663,12 @@ public class SourceParser
 
                 repo.InsertFunctionSignature(sig);
                 func.FunctionSignatureId = sig.Id;
+
+                // Update the body's FQN to the normalized signature for better database representation
+                if (!string.IsNullOrEmpty(func.FunctionSignature.FullyQualifiedName))
+                {
+                    func.FullyQualifiedName = func.FunctionSignature.FullyQualifiedName;
+                }
             }
 
             repo.InsertFunctionBody(func);
@@ -680,7 +686,6 @@ public class SourceParser
         typeRepoInstance.SaveChanges(); // SAVE #7 (final)
         _progressReporter?.Finish("Database save completed.");
     }
-
 
     public void GenerateHeaderFiles(string outputDir = "./include/", ITypeRepository? repository = null)
     {

@@ -153,8 +153,10 @@ public class StructOutputGenerator : TypeOutputGeneratorBase
                 // Try exact name match (MemberName == BodyName or BodyName ends with ::MemberName)
                 // Start with simplest robust check
                 exactMatch = associatedBodies.FirstOrDefault(b =>
-                    b.FullyQualifiedName.EndsWith($"::{member.Name}") ||
-                    b.FullyQualifiedName == member.Name);
+                {
+                    string bodyName = b.FunctionSignature?.Name ?? b.FullyQualifiedName;
+                    return bodyName.EndsWith($"::{member.Name}") || bodyName == member.Name;
+                });
 
                 if (exactMatch != null)
                 {

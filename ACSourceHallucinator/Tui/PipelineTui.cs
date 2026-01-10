@@ -23,25 +23,12 @@ public class PipelineTui
 
     // Rendering Cache
     private int _lastWidth;
-    private int _lastHeight;
     private int _lastEventCountSnapshot;
     private List<(string Content, string Color)> _cachedWrappedLines = new();
 
     public PipelineTui(IAnsiConsole console)
     {
         _console = console;
-    }
-
-    private void LogInternalError(Exception ex)
-    {
-        try
-        {
-            System.IO.File.AppendAllText("tui_error.log", $"[{DateTime.Now}] {ex.ToString()}{Environment.NewLine}");
-        }
-        catch
-        {
-            // Ignore errors during error logging
-        }
     }
 
     /// <summary>
@@ -65,9 +52,9 @@ public class PipelineTui
                         {
                             ctx.UpdateTarget(GetRenderable());
                         }
-                        catch (Exception ex)
+                        catch
                         {
-                            LogInternalError(ex);
+                            // Silent failure for TUI update
                         }
 
                         try
@@ -85,11 +72,6 @@ public class PipelineTui
                 {
                     await action();
                 }
-                catch (Exception ex)
-                {
-                    LogInternalError(ex);
-                    throw;
-                }
                 finally
                 {
                     refreshCts.Cancel();
@@ -105,9 +87,9 @@ public class PipelineTui
                     {
                         ctx.UpdateTarget(GetRenderable());
                     }
-                    catch (Exception ex)
+                    catch
                     {
-                        LogInternalError(ex);
+                        // Silent failure for final TUI update
                     }
                 }
             });
@@ -220,7 +202,8 @@ public class PipelineTui
             // 1. Header
             var header = new Panel(
                     Align.Center(
-                        new Markup($"[bold blue]ACHallucinator Pipeline[/] - [bold yellow]Stage:[/] {Markup.Escape(stageName)}"),
+                        new Markup(
+                            $"[bold blue]ACHallucinator Pipeline[/] - [bold yellow]Stage:[/] {Markup.Escape(stageName)}"),
                         VerticalAlignment.Middle))
                 .Border(BoxBorder.Rounded)
                 .Expand();
@@ -270,12 +253,12 @@ public class PipelineTui
             {
                 _cachedWrappedLines = WrapLog(logSnapshot, availableLogWidth);
                 _lastWidth = availableLogWidth;
-                _lastHeight = logHeight;
                 _lastEventCountSnapshot = logSnapshot.Count;
             }
 
             var logGrid = new Grid().Expand().AddColumn();
-            var linesToShow = _cachedWrappedLines.Skip(Math.Max(0, _cachedWrappedLines.Count - logHeight)).Take(logHeight).ToList();
+            var linesToShow = _cachedWrappedLines.Skip(Math.Max(0, _cachedWrappedLines.Count - logHeight))
+                .Take(logHeight).ToList();
 
             foreach (var line in linesToShow)
             {
@@ -316,7 +299,6 @@ public class PipelineTui
         }
         catch (Exception ex)
         {
-            LogInternalError(ex);
             return new Markup($"[red]UI Error: {Markup.Escape(ex.Message)}[/]");
         }
     }
@@ -331,7 +313,7 @@ public class PipelineTui
                 ProgressEventType.Error => "red",
                 ProgressEventType.Warning => "yellow",
                 ProgressEventType.Success => "green",
-                ProgressEventType.GeneratedContent => "lightblue",
+                ProgressEventType.GeneratedContent => "cyan",
                 _ => "grey"
             };
 

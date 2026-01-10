@@ -318,16 +318,23 @@ public class ClassOutputGenerator : TypeOutputGeneratorBase
             yield return new CodeToken($"// ── Method signatures ──", TokenType.Comment);
             yield return new CodeToken(Environment.NewLine, TokenType.Whitespace);
 
-            foreach (var body in functionBodies.OrderBy(b => b.FullyQualifiedName))
+            foreach (var body in functionBodies.OrderBy(b => b.FunctionSignature?.Name ?? b.FullyQualifiedName))
             {
                 yield return new CodeToken(memberIndent, TokenType.Whitespace);
 
-                // Extract method name from fully qualified name for virtual check
-                string methodName = body.FullyQualifiedName;
+                // Extract method name from signature name (if available) or FQN for virtual check
+                string methodName = body.FunctionSignature?.Name ?? body.FullyQualifiedName;
                 int lastColonIndex = methodName.LastIndexOf("::");
                 if (lastColonIndex >= 0)
                 {
                     methodName = methodName.Substring(lastColonIndex + 2);
+                }
+
+                // If we still have parentheses (shouldn't happen with FunctionSignature.Name), strip them
+                int parenIndex = methodName.IndexOf('(');
+                if (parenIndex >= 0)
+                {
+                    methodName = methodName.Substring(0, parenIndex);
                 }
 
                 // Check if this method is virtual (exists in vtable)

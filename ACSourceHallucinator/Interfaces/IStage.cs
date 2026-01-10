@@ -29,5 +29,6 @@ public enum ProgressEventType
     Info,
     Warning,
     Error,
-    Success
+    Success,
+    GeneratedContent
 }

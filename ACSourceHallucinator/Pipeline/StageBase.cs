@@ -105,6 +105,8 @@ public abstract class StageBase : IStage
             result.Status = StageResultStatus.Success;
             result.GeneratedContent = sanitizedContent;
             result.UpdatedAt = DateTime.UtcNow;
+            var logContent = sanitizedContent;
+            OnProgressUpdated(logContent, ProgressEventType.GeneratedContent);
             OnProgressUpdated($"Successfully processed {item.FullyQualifiedName}", ProgressEventType.Success);
             return result;
         }

@@ -48,7 +48,7 @@ public class CommentFunctionsStage : StageBase
             EntityType = EntityType.StructMethod,
             EntityId = f.Id,
             EntityName = f.FunctionSignature?.Name ?? "Unknown",
-            FullyQualifiedName = f.FullyQualifiedName,
+            FullyQualifiedName = f.FunctionSignature?.FullyQualifiedName ?? f.FullyQualifiedName,
             Metadata = new Dictionary<string, object>
             {
                 ["ParentTypeId"] = f.ParentId!.Value
@@ -151,7 +151,7 @@ Only respond with the JSON object, no other text.";
 Guidelines:
 - Focus on WHAT the function does, not HOW it does it
 - Mention key parameters and return values if relevant
-- Keep comments to 1-3 sentences
+- Keep comments to 1-4 sentences
 - Do not include code formatting or markdown
 - Do not start with ""This function"" - be direct
 - If the purpose is unclear, describe the observable behavior

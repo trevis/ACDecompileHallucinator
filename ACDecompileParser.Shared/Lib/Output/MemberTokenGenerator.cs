@@ -281,6 +281,12 @@ public class MemberTokenGenerator
         if (string.IsNullOrEmpty(name))
             name = fallbackName;
 
+        // Strip context namespace prefix (e.g. "Class::Method" -> "Method")
+        if (!string.IsNullOrEmpty(contextNamespace) && name.StartsWith(contextNamespace + "::"))
+        {
+            name = name.Substring(contextNamespace.Length + 2);
+        }
+
         yield return new CodeToken(name, TokenType.Identifier);
 
         yield return new CodeToken("(", TokenType.Punctuation);
