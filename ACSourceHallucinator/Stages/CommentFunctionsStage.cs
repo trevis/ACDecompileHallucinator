@@ -70,7 +70,7 @@ public class CommentFunctionsStage : StageBase
             ct);
 
         var builder = new PromptBuilder()
-            .WithSystemMessage(SystemPrompt)
+            .WithSystemMessage(GetSystemPrompt(item.FullyQualifiedName))
             .WithTargetContext($"Generating comments for function:\n{function.FullyQualifiedName}")
             .WithReferences(references)
             .WithRetryFeedback(failureHistory)
@@ -142,7 +142,7 @@ public class CommentFunctionsStage : StageBase
             $@"You are a code review assistant. Verify whether the following XML documentation comment accurately describes the function AND follows the provided guidelines.
 
 === GUIDELINES ===
-{SystemPrompt}
+{GetSystemPrompt(item.FullyQualifiedName)}
 
 === REFERENCES ===
 {references}
@@ -162,11 +162,11 @@ Respond with a JSON object in exactly this format:
 Only respond with the JSON object, no other text.";
     }
 
-    private const string SystemPrompt =
-        @"You are an expert C++ code analyst. Your task is to generate valid XML documentation comments for decompiled C++ functions, following C# xmldoc conventions.
+    private string GetSystemPrompt(string fullyQualifiedName) =>
+        $@"You are an expert C++ code analyst. Your task is to generate valid XML documentation comments for decompiled C++ functions, following C# xmldoc conventions.
 
 Guidelines:
-- Use <summary> to describe WHAT the function does concisely (1-3 sentences).
+- Use <summary> to describe WHAT the function {fullyQualifiedName} does concisely (1-3 sentences).
 - Use <param name=""parameterName""> to describe each parameter if relevant.
 - Use <returns> to describe the return value if relevant.
 - Focus on behavior and purpose, not implementation details.

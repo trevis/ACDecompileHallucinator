@@ -76,7 +76,7 @@ public class CommentStructsStage : StageBase
             ct);
 
         var builder = new PromptBuilder()
-            .WithSystemMessage(SystemPrompt)
+            .WithSystemMessage(GetSystemPrompt(item.FullyQualifiedName))
             .WithTargetContext($"Generating comments for struct:\n{item.FullyQualifiedName}")
             .WithReferences(contextReferences)
             .WithRetryFeedback(failureHistory)
@@ -156,7 +156,7 @@ public class CommentStructsStage : StageBase
             $@"You are a code review assistant. Verify whether the following XML documentation comment accurately describes the struct AND follows the provided guidelines.
 
 === GUIDELINES ===
-{SystemPrompt}
+{GetSystemPrompt(item.FullyQualifiedName)}
 
 === STRUCT ===
 {structDefinition}
@@ -176,11 +176,11 @@ Respond with a JSON object in exactly this format:
 Only respond with the JSON object, no other text.";
     }
 
-    private const string SystemPrompt =
-        @"You are an expert C++ code analyst. Your task is to generate valid XML documentation comments for C++ structs/classes, following C# xmldoc conventions.
+    private string GetSystemPrompt(string fullyQualifiedName) =>
+        $@"You are an expert C++ code analyst. Your task is to generate valid XML documentation comments for C++ structs/classes, following C# xmldoc conventions.
 
 Guidelines:
-- Use <summary> to describe the purpose and responsibility of the struct/class concisely (1-3 sentences).
+- Use <summary> to describe the purpose and responsibility of the struct/class {fullyQualifiedName} concisely (1-3 sentences).
 - Focus on what the struct represents and its role in the system.
 - Do not start with ""This struct"" or ""This class"" - be direct.
 - The output should contain the XML tags themselves (e.g., <summary>).

@@ -66,7 +66,7 @@ public class CommentEnumsStage : StageBase
             ct);
 
         var builder = new PromptBuilder()
-            .WithSystemMessage(SystemPrompt)
+            .WithSystemMessage(GetSystemPrompt(item.FullyQualifiedName))
             .WithReferences(referencingFunctions)
             .WithRetryFeedback(failureHistory)
             .WithPreviousResponse(previousResponse)
@@ -135,7 +135,7 @@ public class CommentEnumsStage : StageBase
             $@"You are a code review assistant. Verify whether the following XML documentation comment accurately describes the enum AND follows the provided guidelines.
 
 === GUIDELINES ===
-{SystemPrompt}
+{GetSystemPrompt(item.FullyQualifiedName)}
 
 === ENUM ===
 {enumDefinition}
@@ -155,13 +155,14 @@ Respond with a JSON object in exactly this format:
 Only respond with the JSON object, no other text.";
     }
 
-    private const string SystemPrompt =
-        @"You are an expert C++ code analyst. Your task is to generate valid XML documentation comments for C++ enums, following C# xmldoc conventions.
+    private string GetSystemPrompt(string fullyQualifiedName) =>
+        $@"You are an expert C++ code analyst. Your task is to generate valid XML documentation comments for C++ enums, following C# xmldoc conventions.
 
 Guidelines:
-- Use <summary> to describe the purpose and usage of the enum concisely (1-3 sentences).
+- Use <summary> to describe the purpose and usage of the enum {fullyQualifiedName} concisely (1-3 sentences).
 - Focus on what the enum represents in the system.
 - Do not start with ""This enum"" - be direct.
+- Include an overview of the enum, you do not need to describe each member.
 - The output should contain the XML tags themselves (e.g., <summary>).
 - Multiple top-level tags are allowed and expected. This is valid for xmldoc.
 - Do not include any other text or markdown blocks, only the XML content.";

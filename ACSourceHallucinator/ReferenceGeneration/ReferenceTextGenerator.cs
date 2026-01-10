@@ -7,6 +7,7 @@ using ACSourceHallucinator.Data.Repositories;
 using ACSourceHallucinator.Enums;
 using ACSourceHallucinator.Interfaces;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Data.Sqlite;
 
 namespace ACSourceHallucinator.ReferenceGeneration;
 
@@ -200,21 +201,45 @@ public class ReferenceTextGenerator : IReferenceTextGenerator
         // Add referencing functions
         if (options.IncludeReferencingFunctions)
         {
-            var referencingFunctions = await _typeDb.FunctionBodies
-                .Where(f => f.BodyText.Contains(enumType.BaseName))
-                .Take(20)
+            var members = await _typeDb.EnumMembers
+                .Where(m => m.EnumTypeId == enumId)
+                .Select(m => m.Name)
                 .ToListAsync(ct);
 
-            if (referencingFunctions.Any())
+            var searchTerms = new List<string> { enumType.BaseName };
+            searchTerms.AddRange(members);
+            searchTerms = searchTerms.Distinct().Where(t => !string.IsNullOrWhiteSpace(t)).ToList();
+
+            if (searchTerms.Any())
             {
-                sb.AppendLine();
-                sb.AppendLine();
-                sb.AppendLine("=== REFERENCING FUNCTIONS ===");
-                foreach (var func in referencingFunctions)
+                // Parametric raw SQL to avoid injection and handle parameters properly
+                var sql = new StringBuilder();
+                sql.Append("SELECT * FROM FunctionBodies WHERE ");
+                sql.Append(string.Join(" OR ", searchTerms.Select((_, i) => $"BodyText LIKE @p{i}")));
+                sql.Append(" ORDER BY (");
+                sql.Append(string.Join(" + ",
+                    searchTerms.Select((_, i) => $"CASE WHEN BodyText LIKE @p{i} THEN 1 ELSE 0 END")));
+                sql.Append(") DESC LIMIT 20");
+
+                var sqlString = sql.ToString();
+                var parameters = searchTerms.Select((t, i) => (object)new SqliteParameter($"@p{i}", $"%{t}%"))
+                    .ToArray();
+
+                var referencingFunctions = await _typeDb.FunctionBodies
+                    .FromSqlRaw(sqlString, parameters)
+                    .ToListAsync(ct);
+
+                if (referencingFunctions.Any())
                 {
                     sb.AppendLine();
-                    sb.AppendLine($"// From {func.FullyQualifiedName}");
-                    sb.AppendLine(func.BodyText);
+                    sb.AppendLine();
+                    sb.AppendLine("=== REFERENCING FUNCTIONS ===");
+                    foreach (var func in referencingFunctions)
+                    {
+                        sb.AppendLine();
+                        sb.AppendLine($"// From {func.FullyQualifiedName}");
+                        sb.AppendLine(func.BodyText);
+                    }
                 }
             }
         }

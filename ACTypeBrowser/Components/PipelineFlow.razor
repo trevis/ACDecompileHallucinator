@@ -183,19 +183,29 @@
     }
     
     /* Re-use code-view style from TypeDetail */
-    .code-view {
+    .pipeline-container .code-view {
         background-color: var(--code-bg);
         color: var(--code-text);
         padding: 1rem;
         border-radius: 4px;
-        overflow-x: auto;
         font-family: 'Consolas', 'Monaco', monospace;
         font-size: 0.85rem;
         border: 1px solid var(--border-color);
         max-height: 400px;
+        overflow-y: auto;
+        overflow-x: hidden !important;
     }
     
-    .code-view pre { margin: 0; }
+    .pipeline-container .code-view pre { 
+        margin: 0;
+        white-space: pre-wrap !important;
+        word-break: break-all !important;
+    }
+
+    .pipeline-container .code-view code {
+        white-space: pre-wrap !important;
+        word-break: break-all !important;
+    }
     
     /* Dark theme overrides for cards/accordion */
     .card {
