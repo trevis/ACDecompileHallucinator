@@ -147,14 +147,18 @@ public class TypeResolutionService
                 // PERFORMANCE: Use in-memory lookup instead of querying database
                 if (typeRefLookup.TryGetValue(typeReference.TypeString, out var existingTypeRef))
                 {
-                    ta.TypeReferenceId = existingTypeRef.Id;
+                    // Use navigation property as the ID might be 0 if it was just added in this batch
+                    ta.TypeReference = existingTypeRef;
                 }
                 else
                 {
                     // Insert new type reference
-                    var newTypeRefId = _repository.InsertTypeReference(typeReference);
-                    typeReference.Id = newTypeRefId;
-                    ta.TypeReferenceId = typeReference.Id;
+                    _repository.InsertTypeReference(typeReference);
+
+                    // IMPORTANT: Use navigation property so EF Core handles the ID propagation 
+                    // because the ID is likely not generated yet (it's 0)
+                    ta.TypeReference = typeReference;
+
                     // Add to lookup for subsequent iterations
                     typeRefLookup[typeReference.TypeString] = typeReference;
                 }

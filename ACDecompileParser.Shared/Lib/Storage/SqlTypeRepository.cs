@@ -170,6 +170,7 @@ public class SqlTypeRepository : ITypeRepository
         }
 
         return query
+            .AsSplitQuery()
             .Include(t => t.TemplateArguments)
             .ThenInclude(ta => ta.TypeReference)
             .Include(t => t.BaseTypes)
@@ -180,6 +181,7 @@ public class SqlTypeRepository : ITypeRepository
     public List<TypeModel> GetTypesByNamespace(string ns)
     {
         return _context.Types
+            .AsSplitQuery()
             .Include(t => t.TemplateArguments)
             .ThenInclude(ta => ta.TypeReference)
             .Include(t => t.BaseTypes)
@@ -191,6 +193,7 @@ public class SqlTypeRepository : ITypeRepository
     public List<TypeModel> GetTypesByTypeType(TypeType typeType)
     {
         return _context.Types
+            .AsSplitQuery()
             .Include(t => t.TemplateArguments)
             .ThenInclude(ta => ta.TypeReference)
             .Include(t => t.BaseTypes)
@@ -202,6 +205,7 @@ public class SqlTypeRepository : ITypeRepository
     public TypeModel? GetTypeByFullyQualifiedName(string fqn)
     {
         return _context.Types
+            .AsSplitQuery()
             .Include(t => t.TemplateArguments)
             .ThenInclude(ta => ta.TypeReference)
             .Include(t => t.BaseTypes)
@@ -220,6 +224,7 @@ public class SqlTypeRepository : ITypeRepository
         var lowerSearchTerm = searchTerm.ToLower();
 
         return query
+            .AsSplitQuery()
             .Include(t => t.TemplateArguments)
             .ThenInclude(ta => ta.TypeReference)
             .Include(t => t.BaseTypes)
@@ -635,6 +640,7 @@ public class SqlTypeRepository : ITypeRepository
         var targetFqn = string.IsNullOrEmpty(ns) ? baseName : $"{ns}::{baseName}";
 
         return _context.Types.AsNoTracking()
+            .AsSplitQuery()
             .Where(t => (t.BaseName == baseName && t.Namespace == ns) ||
                         (t.BaseTypePath != null && t.BaseTypePath == targetFqn))
             .Include(t => t.TemplateArguments)
@@ -701,6 +707,7 @@ public class SqlTypeRepository : ITypeRepository
     {
         var idSet = typeIds.ToHashSet();
         return _context.StructMembers
+            .AsSplitQuery()
             .Include(sm => sm.TypeReference)
             .ThenInclude(tr => tr!.ReferencedType)
             .Include(sm => sm.FunctionSignature)
@@ -725,6 +732,7 @@ public class SqlTypeRepository : ITypeRepository
     public List<FunctionBodyModel> GetFunctionBodiesForType(int typeId)
     {
         return _context.FunctionBodies
+            .AsSplitQuery()
             .Include(fb => fb.FunctionSignature)
             .ThenInclude(fs => fs!.ReturnTypeReference)
             .ThenInclude(tr => tr!.ReferencedType)
@@ -746,6 +754,7 @@ public class SqlTypeRepository : ITypeRepository
     {
         var idSet = typeIds.ToHashSet();
         return _context.FunctionBodies
+            .AsSplitQuery()
             .Include(fb => fb.FunctionSignature)
             .ThenInclude(fs => fs!.ReturnTypeReference)
             .ThenInclude(tr => tr!.ReferencedType)
@@ -779,6 +788,7 @@ public class SqlTypeRepository : ITypeRepository
     public List<StaticVariableModel> GetStaticVariablesForType(int typeId)
     {
         return _context.StaticVariables
+            .AsSplitQuery()
             .Include(sv => sv.TypeReference)
             .ThenInclude(tr => tr!.ReferencedType)
             .Where(sv => sv.ParentTypeId == typeId)
@@ -789,6 +799,7 @@ public class SqlTypeRepository : ITypeRepository
     {
         var idSet = typeIds.ToHashSet();
         return _context.StaticVariables
+            .AsSplitQuery()
             .Include(sv => sv.TypeReference)
             .ThenInclude(tr => tr!.ReferencedType)
             .Where(sv => sv.ParentTypeId.HasValue && idSet.Contains(sv.ParentTypeId.Value))

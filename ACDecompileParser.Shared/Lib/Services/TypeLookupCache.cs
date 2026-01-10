@@ -23,6 +23,7 @@ public class TypeLookupCache
     private bool _isLoaded;
     private readonly object _lock = new();
 
+    [ActivatorUtilitiesConstructor]
     public TypeLookupCache(IServiceScopeFactory scopeFactory)
     {
         _scopeFactory = scopeFactory;

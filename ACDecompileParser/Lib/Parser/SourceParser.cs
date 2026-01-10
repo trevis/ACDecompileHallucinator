@@ -2,6 +2,7 @@ using ACDecompileParser.Shared.Lib.Models;
 using ACDecompileParser.Shared.Lib.Storage;
 using ACDecompileParser.Lib.Output;
 using ACDecompileParser.Shared.Lib.Utilities;
+using ACDecompileParser.Shared.Lib.Services;
 
 namespace ACDecompileParser.Lib.Parser;
 
@@ -672,10 +673,11 @@ public class SourceParser
         // ============================================================
         // PHASE 10: Resolution & Offsets - REMOVED (Handled by Post-Process in Program.cs via InMemoryTypeRepository)
         // ============================================================
-        // _progressReporter?.Report(9, "Phase 10/10: Resolution & Offsets");
-        // ResolveTypeReferencesInMemory(repo, typeRepoInstance, typeModelsByFqn, existingTypeRefsLookup);
-        // repo.PopulateBaseTypePaths(TypeModels);
-        // typeRepoInstance.SaveChanges(); // SAVE #7 (final)
+        _progressReporter?.Report(9, "Phase 10/10: Resolution & Offsets");
+        var resolutionService = new TypeResolutionService(repo, _progressReporter);
+        resolutionService.ResolveTypeReferences();
+        repo.PopulateBaseTypePaths(TypeModels);
+        typeRepoInstance.SaveChanges(); // SAVE #7 (final)
         _progressReporter?.Finish("Database save completed.");
     }
 

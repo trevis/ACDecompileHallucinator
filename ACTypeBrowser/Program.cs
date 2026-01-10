@@ -43,7 +43,8 @@ builder.Services.AddSingleton<HierarchyRuleEngine>(sp =>
 });
 
 // Performance optimization: TypeLookupCache for efficient type resolution
-builder.Services.AddSingleton<TypeLookupCache>();
+builder.Services.AddSingleton<TypeLookupCache>(sp =>
+    new TypeLookupCache(sp.GetRequiredService<IServiceScopeFactory>()));
 
 // Performance optimization: SidebarTreeCache for pre-built sidebar tree
 builder.Services.AddSingleton<SidebarTreeCache>();
