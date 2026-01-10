@@ -48,7 +48,7 @@ public abstract class StageBase : IStage
             UpdatedAt = DateTime.UtcNow
         };
 
-        string? previousFailureReason = null;
+        var failureHistory = new List<string>();
         string? previousResponse = null;
 
         for (int attempt = 0; attempt < Options.MaxRetries; attempt++)
@@ -56,7 +56,7 @@ public abstract class StageBase : IStage
             result.RetryCount = attempt;
 
             // 1. Build and send generation prompt (async)
-            var prompt = await BuildPromptAsync(item, previousFailureReason, previousResponse, ct);
+            var prompt = await BuildPromptAsync(item, failureHistory, previousResponse, ct);
             var response = await LlmClient.SendRequestAsync(
                 new LlmRequest { Prompt = prompt, Model = Options.Model }, ct);
 
@@ -92,14 +92,15 @@ public abstract class StageBase : IStage
             var formatVerification = VerifyResponseFormat(sanitizedContent);
             if (!formatVerification.IsValid)
             {
-                previousFailureReason = $"Format validation failed: {formatVerification.ErrorMessage}";
+                var failureReason = $"Format validation failed: {formatVerification.ErrorMessage}";
+                failureHistory.Add(failureReason);
                 previousResponse = sanitizedContent;
 
                 var lastLog = result.RequestLogs.LastOrDefault();
                 if (lastLog != null)
                 {
                     lastLog.IsSuccess = false;
-                    lastLog.FailureReason = previousFailureReason;
+                    lastLog.FailureReason = failureReason;
                 }
 
                 OnProgressUpdated(
@@ -114,14 +115,15 @@ public abstract class StageBase : IStage
                 var llmVerifyResult = await RunLlmVerificationAsync(item, sanitizedContent, result, ct);
                 if (!llmVerifyResult.IsValid)
                 {
-                    previousFailureReason = $"LLM verification failed: {llmVerifyResult.Reason}";
+                    var failureReason = $"LLM verification failed: {llmVerifyResult.Reason}";
+                    failureHistory.Add(failureReason);
                     previousResponse = sanitizedContent;
 
                     var lastLog = result.RequestLogs.LastOrDefault();
                     if (lastLog != null)
                     {
                         lastLog.IsSuccess = false;
-                        lastLog.FailureReason = previousFailureReason;
+                        lastLog.FailureReason = failureReason;
                     }
 
                     OnProgressUpdated(
@@ -143,7 +145,7 @@ public abstract class StageBase : IStage
 
         // Exhausted retries
         result.Status = StageResultStatus.Failed;
-        result.LastFailureReason = previousFailureReason;
+        result.LastFailureReason = failureHistory.LastOrDefault();
         result.UpdatedAt = DateTime.UtcNow;
         OnProgressUpdated($"Failed to process {item.FullyQualifiedName} after {Options.MaxRetries} attempts",
             ProgressEventType.Error);
@@ -164,7 +166,7 @@ public abstract class StageBase : IStage
     /// </summary>
     protected abstract Task<string> BuildPromptAsync(
         WorkItem item,
-        string? previousFailureReason,
+        IReadOnlyList<string> failureHistory,
         string? previousResponse,
         CancellationToken ct);
 

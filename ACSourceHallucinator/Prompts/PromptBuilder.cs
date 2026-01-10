@@ -6,7 +6,7 @@ public class PromptBuilder
 {
     private string? _systemMessage;
     private string? _referencesSection;
-    private string? _retryFeedback;
+    private readonly List<string> _retryFeedbacks = new();
     private string? _previousResponse;
     private readonly List<(string Input, string Output)> _fewShotExamples = new();
     private string? _input;
@@ -30,11 +30,26 @@ public class PromptBuilder
         return this;
     }
 
-    public PromptBuilder WithRetryFeedback(string? feedback)
+    public PromptBuilder WithRetryFeedback(IEnumerable<string>? feedbacks)
     {
-        _retryFeedback = feedback;
+        if (feedbacks != null)
+        {
+            _retryFeedbacks.AddRange(feedbacks);
+        }
+
         return this;
     }
+
+    public PromptBuilder WithRetryFeedback(string? feedback)
+    {
+        if (feedback != null)
+        {
+            _retryFeedbacks.Add(feedback);
+        }
+
+        return this;
+    }
+
 
     public PromptBuilder WithPreviousResponse(string? response)
     {
@@ -78,10 +93,14 @@ public class PromptBuilder
             sb.AppendLine();
         }
 
-        if (_retryFeedback != null)
+        if (_retryFeedbacks.Any())
         {
             sb.AppendLine("=== PREVIOUS ATTEMPT FEEDBACK ===");
-            sb.AppendLine(_retryFeedback);
+            foreach (var feedback in _retryFeedbacks)
+            {
+                sb.AppendLine($"- {feedback}");
+            }
+
             sb.AppendLine();
         }
 
@@ -92,7 +111,7 @@ public class PromptBuilder
             sb.AppendLine();
         }
 
-        if (_retryFeedback != null || _previousResponse != null)
+        if (_retryFeedbacks.Any() || _previousResponse != null)
         {
             sb.AppendLine("Please address the above feedback and correct the previous output in your response.");
             sb.AppendLine();

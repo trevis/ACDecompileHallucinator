@@ -58,7 +58,7 @@ public class CommentFunctionsStage : StageBase
     }
 
     protected override async Task<string> BuildPromptAsync(
-        WorkItem item, string? previousFailureReason, string? previousResponse, CancellationToken ct)
+        WorkItem item, IReadOnlyList<string> failureHistory, string? previousResponse, CancellationToken ct)
     {
         var function = await _typeDb.FunctionBodies
             .Include(f => f.FunctionSignature)
@@ -73,7 +73,7 @@ public class CommentFunctionsStage : StageBase
             .WithSystemMessage(SystemPrompt)
             .WithTargetContext($"Generating comments for function:\n{function.FullyQualifiedName}")
             .WithReferences(references)
-            .WithRetryFeedback(previousFailureReason)
+            .WithRetryFeedback(failureHistory)
             .WithPreviousResponse(previousResponse)
             .WithFewShotExample(
                 FewShotExamples.FunctionInput1,

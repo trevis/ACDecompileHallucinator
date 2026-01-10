@@ -52,7 +52,7 @@ public class CommentEnumsStage : StageBase
     }
 
     protected override async Task<string> BuildPromptAsync(
-        WorkItem item, string? previousFailureReason, string? previousResponse, CancellationToken ct)
+        WorkItem item, IReadOnlyList<string> failureHistory, string? previousResponse, CancellationToken ct)
     {
         var references = await ReferenceGenerator.GenerateEnumReferenceAsync(
             item.EntityId,
@@ -62,7 +62,7 @@ public class CommentEnumsStage : StageBase
         var builder = new PromptBuilder()
             .WithSystemMessage(SystemPrompt)
             .WithReferences(references)
-            .WithRetryFeedback(previousFailureReason)
+            .WithRetryFeedback(failureHistory)
             .WithPreviousResponse(previousResponse)
             .WithFewShotExample(
                 FewShotExamples.EnumInput1,

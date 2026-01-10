@@ -52,7 +52,7 @@ public class CommentStructsStage : StageBase
     }
 
     protected override async Task<string> BuildPromptAsync(
-        WorkItem item, string? previousFailureReason, string? previousResponse, CancellationToken ct)
+        WorkItem item, IReadOnlyList<string> failureHistory, string? previousResponse, CancellationToken ct)
     {
         var references = await ReferenceGenerator.GenerateStructReferenceAsync(
             item.EntityId,
@@ -68,7 +68,7 @@ public class CommentStructsStage : StageBase
             .WithSystemMessage(SystemPrompt)
             .WithTargetContext($"Generating comments for struct:\n{item.FullyQualifiedName}")
             .WithReferences(references)
-            .WithRetryFeedback(previousFailureReason)
+            .WithRetryFeedback(failureHistory)
             .WithPreviousResponse(previousResponse)
             .WithFewShotExample(
                 FewShotExamples.StructInput1,
