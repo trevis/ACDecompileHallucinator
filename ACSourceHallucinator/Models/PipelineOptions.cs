@@ -6,4 +6,5 @@ public record PipelineOptions
     public bool SkipCache { get; init; }
     public int MaxRetries { get; init; } = 5;
     public required string Model { get; init; }
+    public bool ForceRegeneration { get; init; }
 }
