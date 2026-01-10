@@ -14,15 +14,37 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
 // Database
-var dbPath = Environment.GetEnvironmentVariable("ACTYPEBROWSER_DB_PATH");
+var dbPath = Path.GetFullPath(Environment.GetEnvironmentVariable("ACTYPEBROWSER_DB_PATH") ??
+                              "/projects/ACDecompileHallucinator/out/types.db");
 var connectionString = string.IsNullOrEmpty(dbPath)
     ? builder.Configuration.GetConnectionString("DefaultConnection")
     : $"Data Source={dbPath}";
 
+if (!File.Exists(dbPath))
+{
+    throw new Exception($"Error: Type database not found at {dbPath}");
+}
+
 builder.Services.AddDbContext<TypeContext>(options =>
     options.UseSqlite(connectionString));
 
+// Hallucinator DB
+var hallucinatorDbPath = Path.GetFullPath(Environment.GetEnvironmentVariable("HALLUCINATOR_DB_PATH") ??
+                                          "/projects/ACDecompileHallucinator/out/hallucinator.db");
+string hallucinatorConnectionString = $"Data Source={hallucinatorDbPath}";
+
+if (!File.Exists(hallucinatorDbPath))
+{
+    throw new Exception($"Error: Hallucinator database not found at {hallucinatorDbPath}");
+}
+
+builder.Services.AddDbContext<ACSourceHallucinator.Data.HallucinatorDbContext>(options =>
+    options.UseSqlite(hallucinatorConnectionString));
+
 // Repositories and Services
+builder.Services
+    .AddScoped<ACSourceHallucinator.Data.Repositories.IStageResultRepository,
+        ACSourceHallucinator.Data.Repositories.StageResultRepository>();
 builder.Services.AddScoped<SqlTypeRepository>();
 builder.Services.AddSingleton<ITypeRepository, InMemoryTypeRepository>();
 builder.Services.AddSingleton<ITypeHierarchyService, TypeHierarchyService>();
@@ -51,6 +73,7 @@ builder.Services.AddSingleton<SidebarTreeCache>();
 
 // Theme Service
 builder.Services.AddScoped<ThemeService>();
+builder.Services.AddScoped<PageTitleService>();
 
 // Code Generators
 builder.Services.AddScoped<ICodeGenerator, StructOutputGenerator>();

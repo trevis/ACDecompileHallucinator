@@ -98,6 +98,7 @@ public class PromptBuilder
         if (_input != null)
         {
             sb.AppendLine($"Input: {_input}");
+            sb.AppendLine($"Output:");
         }
 
         return sb.ToString();

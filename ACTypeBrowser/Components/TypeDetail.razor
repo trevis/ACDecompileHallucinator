@@ -3,38 +3,24 @@
 @using ACDecompileParser.Shared.Lib.Models
 @using ACDecompileParser.Shared.Lib.Output.Models
 @using ACDecompileParser.Shared.Lib.Services
+@using ACTypeBrowser.Services
 @using Microsoft.AspNetCore.Components.Routing
 @inject NavigationManager NavigationManager
 @inject TypeLookupCache LookupCache
 @inject TypeGroupProcessor GroupProcessor
 @inject CSharpGroupProcessor CSharpProcessor
+@inject PageTitleService PageTitleService
 @inject IJSRuntime JSRuntime
 
-<div class="type-detail p-4">
+<div class="type-detail">
     @if (TypeGroup == null || !TypeGroup.Any())
     {
-        <p>Select a type to view details.</p>
+        <p class="p-4">Select a type to view details.</p>
     }
     else
     {
-        var firstType = TypeGroup.First();
-        var title = !string.IsNullOrEmpty(Title) ? Title : firstType.BaseName;
-        if (TypeGroup.Count > 1)
-        {
-            title += $" ({TypeGroup.Count} variations)";
-        }
-
-        <h3>
-            @if (TypeGroup.Count == 1)
-            {
-                <span class="badge bg-secondary me-2">@firstType.Type</span>
-            }
-            @title
-        </h3>
-
-        <ul class="nav nav-tabs mb-3">
+        <ul class="nav nav-tabs mb-2 mt-2">
             <li class="nav-item">
-
                 <a class="nav-link @(_activeTab == "definition" ? "active" : "")"
                    @onclick='() => SelectTab("definition")'
                    style="cursor: pointer;">
@@ -65,18 +51,25 @@
                     </a>
                 </li>
             }
+            <li class="nav-item">
+                <a class="nav-link @(_activeTab == "pipeline" ? "active" : "")"
+                   @onclick='() => SelectTab("pipeline")'
+                   style="cursor: pointer;">
+                    Pipeline
+                </a>
+            </li>
         </ul>
 
         @if (_activeTab == "definition")
         {
-            <div class="code-view mt-3">
+            <div class="code-view">
                 <pre><code class="nohighlight">@RenderTokens()</code></pre>
             </div>
         }
         else if (_activeTab == "statics")
         {
-            <div class="statics-view mt-3">
-                <table class="table table-dark table-hover table-sm">
+            <div class="statics-view">
+                <table class="table table-dark table-hover table-sm mb-0">
                     <thead>
                     <tr>
                         <th>Address</th>
@@ -115,13 +108,19 @@
         }
         else if (_activeTab == "csharp")
         {
-            <div class="code-view mt-3">
+            <div class="code-view">
                 <pre><code class="language-csharp">@RenderCSharpBindings()</code></pre>
+            </div>
+        }
+        else if (_activeTab == "pipeline")
+        {
+            <div class="flex-grow-1" style="min-height: 0; overflow: hidden;">
+                <PipelineFlow Type="TypeGroup.First()"/>
             </div>
         }
         else
         {
-            <div class="code-view mt-3">
+            <div class="code-view">
                 @foreach (var type in TypeGroup)
                 {
                     <div class="mb-4">
@@ -322,6 +321,38 @@
             _cachedTypeGroup = TypeGroup;
             _cachedTokens = null;
             _cachedCSharpBindings = null;
+        }
+
+        UpdatePageTitle();
+    }
+
+    private void UpdatePageTitle()
+    {
+        if (TypeGroup?.Any() == true)
+        {
+            var firstType = TypeGroup.First();
+            var title = !string.IsNullOrEmpty(Title) ? Title : firstType.BaseName;
+            if (TypeGroup.Count > 1)
+            {
+                title += $" ({TypeGroup.Count} variations)";
+            }
+
+            PageTitleService.SetTitle(builder =>
+            {
+                if (TypeGroup.Count == 1)
+                {
+                    builder.OpenElement(0, "span");
+                    builder.AddAttribute(1, "class", "badge bg-secondary me-2");
+                    builder.AddContent(2, firstType.Type);
+                    builder.CloseElement();
+                }
+
+                builder.AddContent(3, title);
+            });
+        }
+        else
+        {
+            PageTitleService.SetTitle("Type Details");
         }
     }
 

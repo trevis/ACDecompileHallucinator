@@ -1,6 +1,7 @@
 ﻿@using ACTypeBrowser.Services
 @inherits LayoutComponentBase
 @inject ThemeService ThemeService
+@inject PageTitleService PageTitleService
 @implements IDisposable
 
 
@@ -19,7 +20,17 @@
     </div>
 
     <main>
-        <div class="top-row px-4">
+        <div class="top-row px-4 d-flex justify-content-between align-items-center">
+            <h3 class="page-header-title m-0">
+                @if (PageTitleService.TitleFragment != null)
+                {
+                    @PageTitleService.TitleFragment
+                }
+                else
+                {
+                    @PageTitleService.Title
+                }
+            </h3>
             <div class="top-row-content">
                 <ThemeToggle/>
             </div>
@@ -42,11 +53,18 @@
     protected override void OnInitialized()
     {
         ThemeService.OnThemeChanged += StateHasChanged;
+        PageTitleService.OnTitleChanged += OnTitleChanged;
+    }
+
+    private void OnTitleChanged()
+    {
+        StateHasChanged();
     }
 
     public void Dispose()
     {
         ThemeService.OnThemeChanged -= StateHasChanged;
+        PageTitleService.OnTitleChanged -= OnTitleChanged;
     }
 
 }

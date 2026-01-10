@@ -195,6 +195,7 @@ public class FunctionBodyParser
         var model = new FunctionBodyModel
         {
             FullyQualifiedName = name,
+            Name = name,
             BodyText = bodyText,
             File = file,
             LineNumber = lineNumber,

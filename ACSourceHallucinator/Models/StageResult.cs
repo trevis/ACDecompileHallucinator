@@ -22,4 +22,7 @@ public class StageResult
 
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
+
+    public virtual ICollection<ACSourceHallucinator.Data.Entities.LlmRequestLog> RequestLogs { get; set; } =
+        new List<ACSourceHallucinator.Data.Entities.LlmRequestLog>();
 }

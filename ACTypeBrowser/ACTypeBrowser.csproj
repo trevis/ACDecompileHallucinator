@@ -16,6 +16,7 @@
 
     <ItemGroup>
       <ProjectReference Include="..\ACDecompileParser.Shared\ACDecompileParser.Shared.csproj" />
+      <ProjectReference Include="..\ACSourceHallucinator\ACSourceHallucinator.csproj" />
     </ItemGroup>
 
 </Project>

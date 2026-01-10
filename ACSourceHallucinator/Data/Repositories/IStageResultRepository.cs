@@ -8,4 +8,5 @@ public interface IStageResultRepository
     Task<HashSet<(EntityType, int)>> GetCompletedEntityIdsAsync(string stageName);
     Task SaveResultAsync(StageResult result);
     Task<StageResult?> GetSuccessfulResultAsync(string stageName, EntityType entityType, int entityId);
+    Task<List<StageResult>> GetResultsWithLogsAsync(EntityType entityType, int entityId);
 }

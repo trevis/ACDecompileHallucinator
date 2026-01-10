@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using ACSourceHallucinator.Data.Entities;
 using ACSourceHallucinator.Data.Repositories;
 using ACSourceHallucinator.Enums;
 using ACSourceHallucinator.Interfaces;
@@ -72,6 +73,19 @@ public abstract class StageBase : IStage
                 result.TotalLlmTime += response.ResponseTime;
             }
 
+            result.RequestLogs.Add(new LlmRequestLog
+            {
+                Attempt = attempt,
+                Prompt = prompt,
+                Response = response.Content, // Use raw content before sanitization
+                Model = Options.Model,
+                PromptTokens = response.PromptTokens,
+                CompletionTokens = response.CompletionTokens,
+                DurationMs = (int)response.ResponseTime.TotalMilliseconds,
+                IsSuccess = true, // Temporarily true, updated if validation fails
+                Timestamp = DateTime.UtcNow
+            });
+
             var sanitizedContent = SanitizeLlmResponse(response.Content);
 
             // 2. Verify response format
@@ -80,6 +94,14 @@ public abstract class StageBase : IStage
             {
                 previousFailureReason = $"Format validation failed: {formatVerification.ErrorMessage}";
                 previousResponse = sanitizedContent;
+
+                var lastLog = result.RequestLogs.LastOrDefault();
+                if (lastLog != null)
+                {
+                    lastLog.IsSuccess = false;
+                    lastLog.FailureReason = previousFailureReason;
+                }
+
                 OnProgressUpdated(
                     $"Item {item.FullyQualifiedName} failed format validation: {formatVerification.ErrorMessage}. Retrying...",
                     ProgressEventType.Warning);
@@ -94,6 +116,14 @@ public abstract class StageBase : IStage
                 {
                     previousFailureReason = $"LLM verification failed: {llmVerifyResult.Reason}";
                     previousResponse = sanitizedContent;
+
+                    var lastLog = result.RequestLogs.LastOrDefault();
+                    if (lastLog != null)
+                    {
+                        lastLog.IsSuccess = false;
+                        lastLog.FailureReason = previousFailureReason;
+                    }
+
                     OnProgressUpdated(
                         $"Item {item.FullyQualifiedName} failed LLM verification: {llmVerifyResult.Reason}. Retrying...",
                         ProgressEventType.Warning);
@@ -209,6 +239,20 @@ public abstract class StageBase : IStage
                 result.IsCacheHit = false;
                 result.TotalLlmTime += verifyResponse.ResponseTime;
             }
+
+            result.RequestLogs.Add(new LlmRequestLog
+            {
+                Attempt = attempt, // Should track verification attempts separately? For now re-using outer attempt might be confusing or just use -1 or distinct model? 
+                // Using nested attempt count or just logging it is fine.
+                Prompt = verifyPrompt,
+                Response = verifyResponse.Content,
+                Model = Options.Model,
+                PromptTokens = verifyResponse.PromptTokens,
+                CompletionTokens = verifyResponse.CompletionTokens,
+                DurationMs = (int)verifyResponse.ResponseTime.TotalMilliseconds,
+                IsSuccess = true,
+                Timestamp = DateTime.UtcNow
+            });
 
             var sanitizedVerifyResponse = SanitizeLlmResponse(verifyResponse.Content);
             var parseResult = ParseLlmVerificationResponse(sanitizedVerifyResponse);
