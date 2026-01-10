@@ -966,24 +966,34 @@ public class CSharpBindingsGenerator
         if (string.IsNullOrEmpty(fqn))
             return "Unknown";
 
-        // Handle cases like "Render::Set3DViewInternal" or full signatures
-        int lastColon = fqn.LastIndexOf("::");
-        if (lastColon >= 0 && lastColon + 2 < fqn.Length)
+        // Strip parameters first to avoid matching :: inside parameters
+        int parenIndex = fqn.IndexOf('(');
+        string namePart = parenIndex > 0 ? fqn.Substring(0, parenIndex) : fqn;
+
+        // Handle cases like "Render::Set3DViewInternal"
+        int lastColon = namePart.LastIndexOf("::");
+        if (lastColon >= 0)
         {
-            string afterColon = fqn.Substring(lastColon + 2);
-            // If there's a '(' in the name, take only up to it
-            int parenIndex = afterColon.IndexOf('(');
-            if (parenIndex > 0)
-                return afterColon.Substring(0, parenIndex);
-            return afterColon;
+            return namePart.Substring(lastColon + 2).Trim();
         }
 
-        // No namespace, check for '(' 
-        int paren = fqn.IndexOf('(');
-        if (paren > 0)
-            return fqn.Substring(0, paren);
+        // Handle global or simplified names
+        // If it's an operator, preserve the operator part (e.g. "void operator delete")
+        int opIndex = namePart.IndexOf("operator");
+        if (opIndex >= 0)
+        {
+            return namePart.Substring(opIndex).Trim();
+        }
 
-        return fqn;
+        // Fallback for global definitions like "void __stdcall Func"
+        // We assume the last word is the name
+        int lastSpace = namePart.LastIndexOf(' ');
+        if (lastSpace >= 0)
+        {
+            return namePart.Substring(lastSpace + 1).Trim();
+        }
+
+        return namePart.Trim();
     }
 
     private static string SanitizeParameterName(string? name)

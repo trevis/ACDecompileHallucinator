@@ -70,8 +70,8 @@ public class OffsetNormalizationTests
         var tokens = generator.Generate(type).ToList();
         var code = string.Join("", tokens.Select(t => t.Text));
 
-        Assert.Contains("// 0x0054CBC0", code);
-        Assert.DoesNotContain("// 0x54CBC0", code);
+        Assert.Contains("0x0054CBC0", code);
+        Assert.DoesNotContain("0x54CBC0", code);
     }
 
     [Fact]

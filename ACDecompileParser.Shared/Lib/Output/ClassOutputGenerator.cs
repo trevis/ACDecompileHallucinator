@@ -373,18 +373,29 @@ public class ClassOutputGenerator : TypeOutputGeneratorBase
 
                 // Extract method name from signature name (if available) or FQN for virtual check
                 string methodName = body.FunctionSignature?.Name ?? body.FullyQualifiedName;
+
+                // Strip parentheses/parameters first to avoid matching :: inside parameters
+                int parenIndex = methodName.IndexOf('(');
+                if (parenIndex >= 0)
+                {
+                    methodName = methodName.Substring(0, parenIndex);
+                }
+
                 int lastColonIndex = methodName.LastIndexOf("::");
                 if (lastColonIndex >= 0)
                 {
                     methodName = methodName.Substring(lastColonIndex + 2);
                 }
 
-                // If we still have parentheses (shouldn't happen with FunctionSignature.Name), strip them
-                int parenIndex = methodName.IndexOf('(');
-                if (parenIndex >= 0)
+                // Fallback for global definitions/spaces (e.g. "void __stdcall Func")
+                // Assumes last word is the name
+                int lastSpace = methodName.LastIndexOf(' ');
+                if (lastSpace >= 0)
                 {
-                    methodName = methodName.Substring(0, parenIndex);
+                    methodName = methodName.Substring(lastSpace + 1);
                 }
+
+                methodName = methodName.Trim();
 
                 // Check if this method is virtual (exists in vtable)
                 bool isVirtual = vtableMethodNames.ContainsKey(methodName);

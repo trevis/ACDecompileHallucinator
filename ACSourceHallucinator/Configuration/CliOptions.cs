@@ -14,7 +14,7 @@ public class CliOptions
     public int TimeoutMinutes { get; init; } = 15;
 
     // Pipeline control
-    public int MaxRetries { get; init; } = 5;
+    public int MaxRetries { get; init; } = 10;
     public bool SkipCache { get; init; }
     public bool ForceRegeneration { get; init; }
     // Debug mode

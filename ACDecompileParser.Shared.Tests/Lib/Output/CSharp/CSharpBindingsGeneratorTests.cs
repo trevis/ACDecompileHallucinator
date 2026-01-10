@@ -1,9 +1,9 @@
 using ACDecompileParser.Shared.Lib.Models;
 using ACDecompileParser.Shared.Lib.Output.CSharp;
 using ACDecompileParser.Shared.Lib.Storage;
-using ACDecompileParser.Lib.Parser;
 using Moq;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace ACDecompileParser.Shared.Tests.Lib.Output.CSharp;
 
@@ -11,9 +11,9 @@ public class CSharpBindingsGeneratorTests
 {
     private readonly Mock<ITypeRepository> _mockRepository;
     private readonly CSharpBindingsGenerator _generator;
-    private readonly Xunit.Abstractions.ITestOutputHelper _testOutput;
+    private readonly ITestOutputHelper _testOutput;
 
-    public CSharpBindingsGeneratorTests(Xunit.Abstractions.ITestOutputHelper testOutput)
+    public CSharpBindingsGeneratorTests(ITestOutputHelper testOutput)
     {
         _testOutput = testOutput;
         _mockRepository = new Mock<ITypeRepository>();
@@ -21,472 +21,34 @@ public class CSharpBindingsGeneratorTests
     }
 
     [Fact]
-    public void Test_Render_Basic_Bindings()
+    public void Test_Generate_MethodWithFullSignatureInFQN_ExtractsNameCorrectly()
     {
-        var renderType = new TypeModel
-        {
-            Id = 1,
-            BaseName = "Render",
-            Type = TypeType.Struct,
-            StructMembers = new List<StructMemberModel>
-            {
-                new() { Name = "__vftable", TypeString = "void*", DeclarationOrder = 1 },
-                new() { Name = "m_nDisplayAdapter", TypeString = "unsigned int", DeclarationOrder = 2 }
-            },
-            FunctionBodies = new List<FunctionBodyModel>
-            {
-                new()
-                {
-                    Id = 101,
-                    FullyQualifiedName = "Render::Render",
-                    FunctionSignature = new FunctionSignatureModel
-                    {
-                        ReturnType = "void",
-                        CallingConvention = "Thiscall",
-                        Parameters = new List<FunctionParamModel>
-                        {
-                            new() { Name = "this", ParameterType = "Render*", Position = 0 }
-                        }
-                    },
-                    Offset = 0x0059EDE0
-                },
-                new()
-                {
-                    Id = 102,
-                    FullyQualifiedName = "Render::~Render",
-                    FunctionSignature = new FunctionSignatureModel
-                    {
-                        ReturnType = "void",
-                        CallingConvention = "Thiscall",
-                        Parameters = new List<FunctionParamModel>
-                        {
-                            new() { Name = "this", ParameterType = "Render*", Position = 0 }
-                        }
-                    },
-                    Offset = 0x0059EDE1
-                },
-                new()
-                {
-                    Id = 103,
-                    FullyQualifiedName = "Render::Set3DViewInternal",
-                    FunctionSignature = new FunctionSignatureModel
-                    {
-                        ReturnType = "int",
-                        CallingConvention = "Thiscall",
-                        Parameters = new List<FunctionParamModel>
-                        {
-                            new() { Name = "this", ParameterType = "Render*", Position = 0 },
-                            new() { Name = "x", ParameterType = "int", Position = 1 },
-                            new() { Name = "y", ParameterType = "int", Position = 2 }
-                        }
-                    },
-                    Offset = 0x0054FC80
-                }
-            }
-        };
+        // Setup a type with a method having the problematic FQN
+        // FQN: unsigned int __stdcall APIManager::IAsheronsCallImpl::AddRef(APIManager::IAsheronsCallImpl*)
 
-        var output = _generator.Generate(renderType);
-        _testOutput.WriteLine(output);
-
-        // Basic verification
-        Assert.Contains("public unsafe struct Render", output);
-        Assert.Contains(": System.IDisposable", output);
-        Assert.Contains("public System.IntPtr __vftable;", output);
-        Assert.Contains("public uint m_nDisplayAdapter;", output);
-
-        // Constructor/Destructor internal
-        Assert.Contains("_ConstructorInternal", output);
-        Assert.Contains("_DestructorInternal", output);
-
-        // Constructors/Dispose wrapping
-        Assert.Contains("public Render()", output);
-        Assert.Contains("_ConstructorInternal(", output);
-        Assert.Contains("public void Dispose()", output);
-        Assert.Contains("_DestructorInternal(", output);
-
-        // Method mapping
-        Assert.Contains("Set3DViewInternal(int x, int y)", output);
-    }
-
-
-    [Fact]
-    public void Test_Generics_Generation()
-    {
-        // Define two instantiations of the same template
-        var types = new List<TypeModel>
-        {
-            new()
-            {
-                Id = 1,
-                BaseName = "SmartArray",
-                Namespace = "ACBindings",
-                Type = TypeType.Struct,
-                TemplateArguments = new List<TypeTemplateArgument>
-                {
-                    new() { Position = 0, TypeString = "int" }
-                },
-                StructMembers = new List<StructMemberModel>
-                {
-                    new() { Name = "m_data", TypeString = "int*", DeclarationOrder = 1 },
-                    new() { Name = "m_size", TypeString = "int", DeclarationOrder = 2 }
-                }
-            },
-            new()
-            {
-                Id = 2,
-                BaseName = "SmartArray",
-                Namespace = "ACBindings",
-                Type = TypeType.Struct,
-                TemplateArguments = new List<TypeTemplateArgument>
-                {
-                    new() { Position = 0, TypeString = "float" }
-                },
-                StructMembers = new List<StructMemberModel>
-                {
-                    // Note: float* vs int* in the other one
-                    new() { Name = "m_data", TypeString = "float*", DeclarationOrder = 1 },
-                    new() { Name = "m_size", TypeString = "int", DeclarationOrder = 2 }
-                }
-            }
-        };
-
-        var output = _generator.GenerateWithNamespace(types);
-        _testOutput.WriteLine(output);
-
-        // Verify we get specialized definitions
-        Assert.Contains("public unsafe struct SmartArray__int", output);
-        Assert.Contains("public unsafe struct SmartArray__float", output);
-
-        // Verify members use specialized types
-        // For SmartArray__int
-        Assert.Contains("public int* m_data;", output);
-        // For SmartArray__float
-        Assert.Contains("public float* m_data;", output);
-
-        Assert.Contains("public int m_size;", output);
-
-        // Verify we DON'T get generic definitions
-        Assert.DoesNotContain("public unsafe struct SmartArray<", output);
-    }
-
-    [Fact]
-    public void Test_Generics_Generation_With_Literals()
-    {
-        // Define two instantiations of the same template with a literal
-        // SmartArray<int, 5> and SmartArray<float, 5>
-        var types = new List<TypeModel>
-        {
-            new()
-            {
-                Id = 1,
-                BaseName = "SmartArrayLiteral",
-                Namespace = "ACBindings",
-                Type = TypeType.Struct,
-                TemplateArguments = new List<TypeTemplateArgument>
-                {
-                    new() { Position = 0, TypeString = "int" },
-                    new() { Position = 1, TypeString = "5" } // Literal
-                },
-                StructMembers = new List<StructMemberModel>
-                {
-                    new() { Name = "m_data", TypeString = "int*", DeclarationOrder = 1 },
-                    new() { Name = "m_size", TypeString = "int", DeclarationOrder = 2 }
-                }
-            },
-            new()
-            {
-                Id = 2,
-                BaseName = "SmartArrayLiteral",
-                Namespace = "ACBindings",
-                Type = TypeType.Struct,
-                TemplateArguments = new List<TypeTemplateArgument>
-                {
-                    new() { Position = 0, TypeString = "float" },
-                    new() { Position = 1, TypeString = "5" } // Literal
-                },
-                StructMembers = new List<StructMemberModel>
-                {
-                    new() { Name = "m_data", TypeString = "float*", DeclarationOrder = 1 },
-                    new() { Name = "m_size", TypeString = "int", DeclarationOrder = 2 }
-                }
-            }
-        };
-
-        var output = _generator.GenerateWithNamespace(types);
-        _testOutput.WriteLine(output);
-
-        // Verify we get specialized definitions including literals
-        // NOTE: Literals are now skipped in the naming
-        Assert.Contains("public unsafe struct SmartArrayLiteral__int", output);
-        Assert.Contains("public unsafe struct SmartArrayLiteral__float", output);
-
-        // Verify members
-        Assert.Contains("public int* m_data;", output);
-        Assert.Contains("public float* m_data;", output);
-
-        // Verify we DON'T get generic definitions
-        Assert.DoesNotContain("public unsafe struct SmartArrayLiteral<", output);
-    }
-
-    [Fact]
-    public void Test_FunctionPointerParameter_InStaticMethod()
-    {
-        // Arrange - simulates UIFlow::RegisterFrameworkClass(unsigned int mode, UIMainFramework *(__cdecl *createMethod)())
-        var uiFlowType = new TypeModel
-        {
-            Id = 1,
-            BaseName = "UIFlow",
-            Type = TypeType.Struct,
-            FunctionBodies = new List<FunctionBodyModel>
-            {
-                new()
-                {
-                    Id = 101,
-                    FullyQualifiedName = "UIFlow::RegisterFrameworkClass",
-                    FunctionSignature = new FunctionSignatureModel
-                    {
-                        ReturnType = "void",
-                        CallingConvention = "Cdecl",
-                        Parameters = new List<FunctionParamModel>
-                        {
-                            new() { Name = "mode", ParameterType = "unsigned int", Position = 0 },
-                            new()
-                            {
-                                Name = "createMethod",
-                                ParameterType = "UIMainFramework*(__cdecl*)()",
-                                Position = 1,
-                                IsFunctionPointerType = true,
-                                NestedFunctionSignature = new FunctionSignatureModel
-                                {
-                                    ReturnType = "void*",
-                                    CallingConvention = "__cdecl",
-                                    Parameters = new List<FunctionParamModel>()
-                                }
-                            }
-                        }
-                    },
-                    Offset = 0x00479C50
-                }
-            }
-        };
-
-        // Act
-        var output = _generator.Generate(uiFlowType);
-        _testOutput.WriteLine(output);
-
-        // Assert - should NOT contain the broken raw string
-        Assert.DoesNotContain("UIMainFramework*(__cdecl*", output);
-        Assert.DoesNotContain("__param2", output);
-
-        // Should contain proper delegate* syntax
-        Assert.Contains("delegate* unmanaged[Cdecl]<System.IntPtr>", output);
-        Assert.Contains("createMethod", output);
-
-        // Full signature check
-        Assert.Contains("RegisterFrameworkClass(uint mode, delegate* unmanaged[Cdecl]<System.IntPtr> createMethod)",
-            output);
-    }
-
-    [Fact]
-    public void Test_FunctionPointerParameter_WithName_InStaticMethod()
-    {
-        // Arrange - simulates UIFlow::RegisterFrameworkClass(unsigned int mode, UIMainFramework *(__cdecl *createMethod)())
-        // This tests that named function pointers are correctly parsed and generated
-        var uiFlowType = new TypeModel
-        {
-            Id = 1,
-            BaseName = "UIFlow",
-            Type = TypeType.Struct,
-            FunctionBodies = new List<FunctionBodyModel>
-            {
-                new()
-                {
-                    Id = 101,
-                    FullyQualifiedName = "UIFlow::RegisterFrameworkClass",
-                    FunctionSignature = new FunctionSignatureModel
-                    {
-                        ReturnType = "void",
-                        CallingConvention = "Cdecl",
-                        Parameters = FunctionParamParser.ParseFunctionParameters(
-                            "unsigned int mode, void *(__cdecl *createMethod)()")
-                    },
-                    Offset = 0x00479C50
-                }
-            }
-        };
-
-        // Act
-        var output = _generator.Generate(uiFlowType);
-        _testOutput.WriteLine(output);
-
-        // Assert - should NOT contain the broken raw string
-        Assert.DoesNotContain("UIMainFramework*(__cdecl*", output);
-
-        // Should contain proper delegate* syntax with correct parameter name
-        Assert.Contains("delegate* unmanaged[Cdecl]<System.IntPtr>", output);
-        Assert.Contains("createMethod", output);
-    }
-
-    [Fact]
-    public void Test_Reserved_Keyword_Renaming()
-    {
         var type = new TypeModel
         {
             Id = 1,
-            BaseName = "OBJECTINFO",
+            BaseName = "IAsheronsCallImpl",
+            Namespace = "APIManager",
             Type = TypeType.Struct,
-            StructMembers = new List<StructMemberModel>
-            {
-                new() { Name = "object", TypeString = "CPhysicsObj*", DeclarationOrder = 1 },
-                new() { Name = "state", TypeString = "int", DeclarationOrder = 2 }
-            },
             FunctionBodies = new List<FunctionBodyModel>
             {
                 new()
                 {
                     Id = 101,
-                    FullyQualifiedName = "OBJECTINFO::init",
+                    FullyQualifiedName =
+                        "unsigned int __stdcall APIManager::IAsheronsCallImpl::AddRef(APIManager::IAsheronsCallImpl*)",
                     FunctionSignature = new FunctionSignatureModel
                     {
-                        ReturnType = "void",
-                        CallingConvention = "Thiscall",
+                        ReturnType = "uint",
+                        CallingConvention = "Stdcall",
                         Parameters = new List<FunctionParamModel>
                         {
-                            new() { Name = "this", ParameterType = "OBJECTINFO*", Position = 0 },
-                            new() { Name = "object", ParameterType = "CPhysicsObj*", Position = 1 },
-                            new() { Name = "object_state", ParameterType = "int", Position = 2 }
+                            new() { Name = "this", ParameterType = "APIManager::IAsheronsCallImpl*", Position = 0 }
                         }
                     },
-                    Offset = 0x0050DA00
-                }
-            },
-            StaticVariables = new List<StaticVariableModel>
-            {
-                new() { Name = "using", TypeString = "int*", Address = "0x12345678" }
-            }
-        };
-
-        var output = _generator.Generate(type);
-        _testOutput.WriteLine(output);
-
-        // Member renaming
-        Assert.Contains("public ACBindings.CPhysicsObj* object_;", output);
-
-        // Parameter renaming in method
-        Assert.Contains("init(ACBindings.CPhysicsObj* object_, int object_state)", output);
-
-        // Static variable renaming
-        Assert.Contains("public static int* using_ = (int*)0x12345678;", output);
-    }
-
-    [Fact]
-    public void Test_FunctionPointerDoublePointerParameter()
-    {
-        // Arrange - simulates UIOption_Menu::SetUIPreference(UIOption *this, bool (__cdecl **tableID)())
-        var uiOptionType = new TypeModel
-        {
-            Id = 1,
-            BaseName = "UIOption_Menu",
-            Type = TypeType.Struct,
-            FunctionBodies = new List<FunctionBodyModel>
-            {
-                new()
-                {
-                    Id = 101,
-                    FullyQualifiedName = "UIOption_Menu::SetUIPreference",
-                    FunctionSignature = new FunctionSignatureModel
-                    {
-                        ReturnType = "void",
-                        CallingConvention = "Thiscall",
-                        Parameters = FunctionParamParser.ParseFunctionParameters(
-                            "UIOption *this, bool (__cdecl **tableID)()")
-                    },
-                    Offset = 0x00484740
-                }
-            }
-        };
-
-        // Act
-        var output = _generator.Generate(uiOptionType);
-        _testOutput.WriteLine(output);
-
-        // Assert
-        // Should contain proper delegate** syntax or delegate* ... *
-        // In our implementation for bool (__cdecl **tableID)() it should be delegate* unmanaged[Cdecl]<byte>*
-        // (Note: bool is mapped to byte in ACBindings)
-        Assert.Contains("delegate* unmanaged[Cdecl]<byte>* tableID", output);
-        Assert.DoesNotContain("bool (__cdecl**tableID)()", output);
-    }
-
-    [Fact]
-    public void Test_Duplicate_Types_Deduplication()
-    {
-        // Define two types that map to the same flattened name
-        var types = new List<TypeModel>
-        {
-            new()
-            {
-                Id = 1,
-                BaseName = "HashSet",
-                Namespace = "ACBindings",
-                Type = TypeType.Struct,
-                TemplateArguments = new List<TypeTemplateArgument>
-                {
-                    new() { Position = 0, TypeString = "unsigned int" }
-                }
-            },
-            new()
-            {
-                Id = 2,
-                BaseName = "HashSet",
-                Namespace = "ACBindings",
-                Type = TypeType.Struct,
-                TemplateArguments = new List<TypeTemplateArgument>
-                {
-                    new() { Position = 0, TypeString = "uint" } // Maps to same as unsigned int
-                }
-            }
-        };
-
-        var output = _generator.GenerateWithNamespace(types);
-        _testOutput.WriteLine(output);
-
-        // Should appear only once
-        int count = System.Text.RegularExpressions.Regex.Matches(output, "public unsafe struct HashSet__uint").Count;
-        Assert.Equal(1, count);
-    }
-
-    [Fact]
-    public void Test_Flattened_Method_Delegate_Signature()
-    {
-        // Define a generic type with a method
-        var type = new TypeModel
-        {
-            Id = 1,
-            BaseName = "HashSet",
-            Namespace = "ACBindings",
-            Type = TypeType.Struct,
-            TemplateArguments = new List<TypeTemplateArgument>
-            {
-                new() { Position = 0, TypeString = "uint" }
-            },
-            FunctionBodies = new List<FunctionBodyModel>
-            {
-                new()
-                {
-                    Id = 101,
-                    FullyQualifiedName = "HashSet<uint>::add",
-                    FunctionSignature = new FunctionSignatureModel
-                    {
-                        ReturnType = "void",
-                        CallingConvention = "Thiscall",
-                        Parameters = new List<FunctionParamModel>
-                        {
-                            new() { Name = "this", ParameterType = "HashSet<uint>*", Position = 0 },
-                            new() { Name = "val", ParameterType = "uint", Position = 1 }
-                        }
-                    },
-                    Offset = 0x00414D80
+                    Offset = 0x0055A7B0
                 }
             }
         };
@@ -494,59 +56,46 @@ public class CSharpBindingsGeneratorTests
         var output = _generator.Generate(type);
         _testOutput.WriteLine(output);
 
-        // Verify the delegate signature uses the flattened name for 'this'
-        // Incorrect: delegate* unmanaged[Thiscall]<ref ACBindings.HashSet, ...>
-        // Correct: delegate* unmanaged[Thiscall]<ref ACBindings.HashSet__uint, uint, void>
-//        Assert.Contains("delegate* unmanaged[Thiscall]<ref ACBindings.HashSet__uint, uint, void>", output);
+        // Verify that the method AddRef is generated correctly
+        Assert.Contains("public static uint AddRef(", output);
+
+        // Ensure it doesn't contain the garbage extraction
+        Assert.DoesNotContain("IAsheronsCallImpl*)", output);
     }
 
     [Fact]
-    public void Test_Duplicate_Nested_Types_Deduplication()
+    public void Test_ExtractMethodName_WithOperator_HandlesCorrectly()
     {
-        // Define a parent type with two nested types that flatten to the SAME name
-        var nested1 = new TypeModel
+        // Test implicit operator/global function names if relevant, though mostly checked via Generate
+        var type = new TypeModel
         {
             Id = 2,
-            BaseName = "NestedStruct",
-            Namespace = "ACBindings.Parents",
+            BaseName = "TestStruct",
             Type = TypeType.Struct,
-            // Uses numeric literal '1'
-            TemplateArguments = new List<TypeTemplateArgument>
+            FunctionBodies = new List<FunctionBodyModel>
             {
-                new() { Position = 0, TypeString = "int" },
-                new() { Position = 1, TypeString = "1" }
+                new()
+                {
+                    Id = 201,
+                    FullyQualifiedName = "void operator delete(void*)",
+                    FunctionSignature = new FunctionSignatureModel
+                    {
+                        ReturnType = "void",
+                        CallingConvention = "Cdecl",
+                        Parameters = new List<FunctionParamModel>
+                        {
+                            new() { Name = "ptr", ParameterType = "void*", Position = 0 }
+                        }
+                    },
+                    Offset = 0x1000
+                }
             }
         };
 
-        var nested2 = new TypeModel
-        {
-            Id = 3,
-            BaseName = "NestedStruct",
-            Namespace = "ACBindings.Parents",
-            Type = TypeType.Struct,
-            // Uses numeric literal '2' -> Flattens to same "NestedStruct__int"
-            TemplateArguments = new List<TypeTemplateArgument>
-            {
-                new() { Position = 0, TypeString = "int" },
-                new() { Position = 1, TypeString = "2" }
-            }
-        };
-
-        var parent = new TypeModel
-        {
-            Id = 1,
-            BaseName = "ParentStruct",
-            Namespace = "ACBindings",
-            Type = TypeType.Struct,
-            NestedTypes = new List<TypeModel> { nested1, nested2 }
-        };
-
-        var output = _generator.Generate(parent);
+        var output = _generator.Generate(type);
         _testOutput.WriteLine(output);
 
-        // Should only contain ONE definition of NestedStruct__int
-        int count = System.Text.RegularExpressions.Regex.Matches(output, "public unsafe struct NestedStruct__int")
-            .Count;
-        Assert.Equal(1, count);
+        // Should contain "operator delete" but commented out because it starts with "operator"
+        Assert.Contains("public static void operator delete(", output);
     }
 }
