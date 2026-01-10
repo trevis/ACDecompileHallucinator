@@ -77,6 +77,19 @@ public class ClassOutputGenerator : TypeOutputGeneratorBase
             yield return new CodeToken(Environment.NewLine, TokenType.Whitespace);
         }
 
+        // Output XML doc comment if available
+        if (!string.IsNullOrEmpty(type.XmlDocComment))
+        {
+            yield return new CodeToken(Environment.NewLine, TokenType.Whitespace);
+            var lines = type.XmlDocComment.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+            foreach (var line in lines)
+            {
+                yield return new CodeToken(indent, TokenType.Whitespace);
+                yield return new CodeToken("/// " + line, TokenType.Comment);
+                yield return new CodeToken(Environment.NewLine, TokenType.Whitespace);
+            }
+        }
+
         // Handle template parameters
         if (type.TemplateArguments?.Count > 0)
         {
@@ -320,6 +333,42 @@ public class ClassOutputGenerator : TypeOutputGeneratorBase
 
             foreach (var body in functionBodies.OrderBy(b => b.FunctionSignature?.Name ?? b.FullyQualifiedName))
             {
+                // Output XML doc comment if available or needs injection
+                string offsetStr = body.Offset.HasValue ? $"{body.Offset.Value:X8}" : "00000000";
+                string signature = body.FunctionSignature?.FullyQualifiedName ?? body.FullyQualifiedName;
+                string escapedSignature = signature.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
+
+                string injection = $"<para>Offset: 0x{offsetStr}<br /><code>{escapedSignature}</code></para>";
+
+                string finalComment = body.XmlDocComment;
+                if (string.IsNullOrWhiteSpace(finalComment))
+                {
+                    finalComment = $"<summary>\n{injection}\n</summary>";
+                }
+                else
+                {
+                    if (finalComment.Contains("</summary>"))
+                    {
+                        finalComment = finalComment.Replace("</summary>", $"\n{injection}\n</summary>");
+                    }
+                    else
+                    {
+                        finalComment = $"<summary>\n{finalComment}\n\n{injection}\n</summary>";
+                    }
+                }
+
+                if (!string.IsNullOrEmpty(finalComment))
+                {
+                    yield return new CodeToken(Environment.NewLine, TokenType.Whitespace);
+                    var lines = finalComment.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+                    foreach (var line in lines)
+                    {
+                        yield return new CodeToken(memberIndent, TokenType.Whitespace);
+                        yield return new CodeToken("/// " + line, TokenType.Comment);
+                        yield return new CodeToken(Environment.NewLine, TokenType.Whitespace);
+                    }
+                }
+
                 yield return new CodeToken(memberIndent, TokenType.Whitespace);
 
                 // Extract method name from signature name (if available) or FQN for virtual check
@@ -354,12 +403,6 @@ public class ClassOutputGenerator : TypeOutputGeneratorBase
 
                 yield return new CodeToken(";", TokenType.Punctuation);
 
-                // Add function address offset comment if available
-                if (body.Offset.HasValue)
-                {
-                    yield return new CodeToken($" // 0x{body.Offset.Value:X8}", TokenType.Comment);
-                }
-
                 yield return new CodeToken(Environment.NewLine, TokenType.Whitespace);
             }
         }
@@ -373,6 +416,19 @@ public class ClassOutputGenerator : TypeOutputGeneratorBase
         Dictionary<int, List<EnumMemberModel>>? enumMembersCache = null)
     {
         string memberIndent = indent + "    ";
+
+        // Output XML doc comment if available
+        if (!string.IsNullOrEmpty(nested.XmlDocComment))
+        {
+            yield return new CodeToken(Environment.NewLine, TokenType.Whitespace);
+            var lines = nested.XmlDocComment.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+            foreach (var line in lines)
+            {
+                yield return new CodeToken(indent, TokenType.Whitespace);
+                yield return new CodeToken("/// " + line, TokenType.Comment);
+                yield return new CodeToken(Environment.NewLine, TokenType.Whitespace);
+            }
+        }
 
         yield return new CodeToken(indent, TokenType.Whitespace);
         yield return new CodeToken("enum", TokenType.Keyword);

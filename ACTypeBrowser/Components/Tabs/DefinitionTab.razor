@@ -4,9 +4,19 @@
 @using ACDecompileParser.Shared.Lib.Output.Models
 @inject TypeLookupCache LookupCache
 @inject TypeGroupProcessor GroupProcessor
+@inject ICommentProvider CommentProvider
 
 <div class="code-view">
-    <pre><code class="nohighlight">@RenderTokens()</code></pre>
+    @if (_cachedTokens == null)
+    {
+        <div class="p-4 text-gray-400 italic">
+            Generating definition and fetching comments...
+        </div>
+    }
+    else
+    {
+        <pre><code class="nohighlight">@RenderTokens()</code></pre>
+    }
 </div>
 
 @code {
@@ -15,25 +25,24 @@
     private IEnumerable<CodeToken>? _cachedTokens;
     private List<TypeModel>? _cachedTypeGroup;
 
-    protected override void OnParametersSet()
+    protected override async Task OnParametersSetAsync()
     {
         if (!ReferenceEquals(TypeGroup, _cachedTypeGroup))
         {
             _cachedTypeGroup = TypeGroup;
             _cachedTokens = null;
+
+            if (TypeGroup != null && TypeGroup.Any())
+            {
+                await GroupProcessor.PopulateCommentsAsync(TypeGroup, CommentProvider);
+                _cachedTokens = GroupProcessor.GenerateGroupTokens(TypeGroup, includeHeaderAndNamespace: false).ToList();
+            }
         }
     }
 
     private IEnumerable<CodeToken> GetTokens()
     {
-        if (_cachedTokens != null)
-            return _cachedTokens;
-
-        if (TypeGroup == null || !TypeGroup.Any())
-            return Enumerable.Empty<CodeToken>();
-
-        _cachedTokens = GroupProcessor.GenerateGroupTokens(TypeGroup, includeHeaderAndNamespace: false).ToList();
-        return _cachedTokens;
+        return _cachedTokens ?? Enumerable.Empty<CodeToken>();
     }
 
     private RenderFragment RenderTokens() => builder =>

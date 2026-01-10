@@ -27,6 +27,18 @@ public class EnumOutputGenerator : TypeOutputGeneratorBase
         yield return new CodeToken("// Reconstructed from database (WIP)", TokenType.Comment);
         yield return new CodeToken(Environment.NewLine, TokenType.Whitespace);
 
+        // Output XML doc comment if available
+        if (!string.IsNullOrEmpty(type.XmlDocComment))
+        {
+            yield return new CodeToken(Environment.NewLine, TokenType.Whitespace);
+            var lines = type.XmlDocComment.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+            foreach (var line in lines)
+            {
+                yield return new CodeToken("/// " + line, TokenType.Comment);
+                yield return new CodeToken(Environment.NewLine, TokenType.Whitespace);
+            }
+        }
+
         yield return new CodeToken("enum", TokenType.Keyword);
         yield return new CodeToken(" ", TokenType.Whitespace);
 
