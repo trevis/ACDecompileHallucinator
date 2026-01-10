@@ -139,41 +139,55 @@ public class CommentFunctionsStage : StageBase
             ct);
 
         return
-            $@"You are a code review assistant. Verify whether the following XML documentation comment accurately describes the function AND follows the provided guidelines.
+            $@"<role>You are a code review assistant.</role>
+<task>Verify whether the following XML documentation comment accurately describes the function AND follows the provided guidelines.</task>
 
-=== GUIDELINES ===
+<guidelines>
 {GetSystemPrompt(item.FullyQualifiedName)}
+</guidelines>
 
-=== REFERENCES ===
+<references>
 {references}
+</references>
 
-=== FUNCTION ===
+<function_body>
 {function.BodyText}
+</function_body>
 
-=== GENERATED COMMENT ===
+<generated_comment>
 {generatedContent}
+</generated_comment>
 
-Respond with a JSON object in exactly this format:
+First, analyze the generated comment step-by-step:
+1. Check if the <summary> accurately reflects the function's logic.
+2. Verify all parameters are documented and match the function signature.
+3. Check for any style violations (e.g., starting with ""This function"").
+4. Identify any hallucinations or inaccuracies.
+
+After your analysis, provide a JSON object in exactly this format:
 {{
     ""valid"": true/false,
     ""reason"": ""explanation if invalid (mention which guideline was violated or what is inaccurate), or 'OK' if valid""
-}}
-
-Only respond with the JSON object, no other text.";
+}}";
     }
 
     private string GetSystemPrompt(string fullyQualifiedName) =>
-        $@"You are an expert C++ code analyst. Your task is to generate valid XML documentation comments for decompiled C++ functions, following C# xmldoc conventions.
+        $@"<role>You are an expert C++ code analyst.</role>
+<task>Your task is to generate valid XML documentation comments for decompiled C++ functions, following C# xmldoc conventions.</task>
 
-Guidelines:
+<guidelines>
 - Use <summary> to describe WHAT the function {fullyQualifiedName} does concisely (1-3 sentences).
 - Use <param name=""parameterName""> to describe each parameter if relevant.
 - Use <returns> to describe the return value if relevant.
 - Focus on behavior and purpose, not implementation details.
 - Do not start descriptions with ""This function"" - be direct.
+</guidelines>
+
+<output_format>
 - The output should contain the XML tags themselves (e.g., <summary>, <param>, <returns>).
 - Multiple top-level tags are allowed and expected (e.g., a <summary> followed by several <param> tags). This is valid for xmldoc.
-- Do not include any other text or markdown blocks, only the XML content.";
+- Do not include any other text or markdown blocks, only the XML content.
+</output_format>";
 
     private static class FewShotExamples
     {

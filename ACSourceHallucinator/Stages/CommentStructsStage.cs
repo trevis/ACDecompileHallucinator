@@ -153,39 +153,53 @@ public class CommentStructsStage : StageBase
             ct);
 
         return
-            $@"You are a code review assistant. Verify whether the following XML documentation comment accurately describes the struct AND follows the provided guidelines.
+            $@"<role>You are a code review assistant.</role>
+<task>Verify whether the following XML documentation comment accurately describes the struct AND follows the provided guidelines.</task>
 
-=== GUIDELINES ===
+<guidelines>
 {GetSystemPrompt(item.FullyQualifiedName)}
+</guidelines>
 
-=== STRUCT ===
+<struct_definition>
 {structDefinition}
+</struct_definition>
 
-=== REFERENCES ===
+<references>
 {contextReferences}
+</references>
 
-=== GENERATED COMMENT ===
+<generated_comment>
 {generatedContent}
+</generated_comment>
 
-Respond with a JSON object in exactly this format:
+First, analyze the generated comment step-by-step:
+1. Check if the <summary> accurately reflects the struct's purpose.
+2. Verify that the description aligns with the struct members and usage.
+3. Check for any style violations (e.g., starting with ""This struct"").
+4. Identify any hallucinations or inaccuracies.
+
+After your analysis, provide a JSON object in exactly this format:
 {{
     ""valid"": true/false,
     ""reason"": ""explanation if invalid (mention which guideline was violated or what is inaccurate), or 'OK' if valid""
-}}
-
-Only respond with the JSON object, no other text.";
+}}";
     }
 
     private string GetSystemPrompt(string fullyQualifiedName) =>
-        $@"You are an expert C++ code analyst. Your task is to generate valid XML documentation comments for C++ structs/classes, following C# xmldoc conventions.
+        $@"<role>You are an expert C++ code analyst.</role>
+<task>Your task is to generate valid XML documentation comments for C++ structs/classes, following C# xmldoc conventions.</task>
 
-Guidelines:
+<guidelines>
 - Use <summary> to describe the purpose and responsibility of the struct/class {fullyQualifiedName} concisely (1-3 sentences).
 - Focus on what the struct represents and its role in the system.
 - Do not start with ""This struct"" or ""This class"" - be direct.
+</guidelines>
+
+<output_format>
 - The output should contain the XML tags themselves (e.g., <summary>).
 - Multiple top-level tags are allowed and expected. This is valid for xmldoc.
-- Do not include any other text or markdown blocks, only the XML content.";
+- Do not include any other text or markdown blocks, only the XML content.
+</output_format>";
 
     private static class FewShotExamples
     {

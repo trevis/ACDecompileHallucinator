@@ -132,40 +132,54 @@ public class CommentEnumsStage : StageBase
             ct);
 
         return
-            $@"You are a code review assistant. Verify whether the following XML documentation comment accurately describes the enum AND follows the provided guidelines.
+            $@"<role>You are a code review assistant.</role>
+<task>Verify whether the following XML documentation comment accurately describes the enum AND follows the provided guidelines.</task>
 
-=== GUIDELINES ===
+<guidelines>
 {GetSystemPrompt(item.FullyQualifiedName)}
+</guidelines>
 
-=== ENUM ===
+<enum_definition>
 {enumDefinition}
+</enum_definition>
 
-=== REFERENCES ===
+<references>
 {referencingFunctions}
+</references>
 
-=== GENERATED COMMENT ===
+<generated_comment>
 {generatedContent}
+</generated_comment>
 
-Respond with a JSON object in exactly this format:
+First, analyze the generated comment step-by-step:
+1. Check if the <summary> accurately reflects the enum's purpose.
+2. Verify that the description aligns with the enum members and references.
+3. Check for any style violations (e.g., starting with ""This enum"").
+4. Identify any hallucinations or inaccuracies.
+
+After your analysis, provide a JSON object in exactly this format:
 {{
     ""valid"": true/false,
     ""reason"": ""explanation if invalid (mention which guideline was violated or what is inaccurate), or 'OK' if valid""
-}}
-
-Only respond with the JSON object, no other text.";
+}}";
     }
 
     private string GetSystemPrompt(string fullyQualifiedName) =>
-        $@"You are an expert C++ code analyst. Your task is to generate valid XML documentation comments for C++ enums, following C# xmldoc conventions.
+        $@"<role>You are an expert C++ code analyst.</role>
+<task>Your task is to generate valid XML documentation comments for C++ enums, following C# xmldoc conventions.</task>
 
-Guidelines:
+<guidelines>
 - Use <summary> to describe the purpose and usage of the enum {fullyQualifiedName} concisely (1-3 sentences).
 - Focus on what the enum represents in the system.
 - Do not start with ""This enum"" - be direct.
 - Include an overview of the enum, you do not need to describe each member.
+</guidelines>
+
+<output_format>
 - The output should contain the XML tags themselves (e.g., <summary>).
 - Multiple top-level tags are allowed and expected. This is valid for xmldoc.
-- Do not include any other text or markdown blocks, only the XML content.";
+- Do not include any other text or markdown blocks, only the XML content.
+</output_format>";
 
     private static class FewShotExamples
     {

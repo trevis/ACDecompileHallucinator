@@ -196,10 +196,25 @@ public abstract class StageBase : IStage
     /// </summary>
     protected virtual VerificationResult ParseLlmVerificationResponse(string response)
     {
-        // Default JSON parsing for { "valid": bool, "reason": string }
+        // Attempt to find JSON object in the response
+        var jsonStart = response.IndexOf('{');
+        var jsonEnd = response.LastIndexOf('}');
+
+        if (jsonStart == -1 || jsonEnd == -1 || jsonEnd < jsonStart)
+        {
+             return new VerificationResult
+            {
+                IsValid = false,
+                Reason = "Could not find valid JSON object in response",
+                IsFormatError = true
+            };
+        }
+
+        var jsonString = response.Substring(jsonStart, jsonEnd - jsonStart + 1);
+
         try
         {
-            var json = JsonSerializer.Deserialize<LlmVerificationJson>(response);
+            var json = JsonSerializer.Deserialize<LlmVerificationJson>(jsonString);
             return new VerificationResult
             {
                 IsValid = json?.Valid ?? false,
@@ -286,7 +301,7 @@ public abstract class StageBase : IStage
         if (previousError != null)
         {
             prompt +=
-                $"\n\n=== PREVIOUS ATTEMPT ERROR ===\n{previousError}\n\nPlease ensure your response is valid JSON.";
+                $"\n\n<previous_verification_error>\n{previousError}\n</previous_verification_error>\n\nPlease ensure your response is valid JSON.";
         }
 
         return prompt;
