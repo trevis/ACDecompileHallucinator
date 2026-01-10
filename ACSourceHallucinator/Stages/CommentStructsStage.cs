@@ -54,26 +54,37 @@ public class CommentStructsStage : StageBase
     protected override async Task<string> BuildPromptAsync(
         WorkItem item, IReadOnlyList<string> failureHistory, string? previousResponse, CancellationToken ct)
     {
-        var references = await ReferenceGenerator.GenerateStructReferenceAsync(
+        var structDefinition = await ReferenceGenerator.GenerateStructReferenceAsync(
+            item.EntityId,
+            new ReferenceOptions
+            {
+                IncludeComments = false,
+                IncludeBaseTypes = false,
+                IncludeMemberFunctions = false
+            },
+            ct);
+
+        var contextReferences = await ReferenceGenerator.GenerateStructReferenceAsync(
             item.EntityId,
             new ReferenceOptions
             {
                 IncludeComments = false,
                 IncludeBaseTypes = true,
-                IncludeMemberFunctions = true
+                IncludeMemberFunctions = true,
+                IncludeDefinition = false
             },
             ct);
 
         var builder = new PromptBuilder()
             .WithSystemMessage(SystemPrompt)
             .WithTargetContext($"Generating comments for struct:\n{item.FullyQualifiedName}")
-            .WithReferences(references)
+            .WithReferences(contextReferences)
             .WithRetryFeedback(failureHistory)
             .WithPreviousResponse(previousResponse)
             .WithFewShotExample(
                 FewShotExamples.StructInput1,
                 FewShotExamples.StructOutput1)
-            .WithInput(references);
+            .WithInput(structDefinition);
 
         return builder.Build();
     }
@@ -120,13 +131,24 @@ public class CommentStructsStage : StageBase
     protected override async Task<string> BuildLlmVerificationPromptAsync(
         WorkItem item, string generatedContent, CancellationToken ct)
     {
-        var references = await ReferenceGenerator.GenerateStructReferenceAsync(
+        var structDefinition = await ReferenceGenerator.GenerateStructReferenceAsync(
+            item.EntityId,
+            new ReferenceOptions
+            {
+                IncludeComments = false,
+                IncludeBaseTypes = false,
+                IncludeMemberFunctions = false
+            },
+            ct);
+
+        var contextReferences = await ReferenceGenerator.GenerateStructReferenceAsync(
             item.EntityId,
             new ReferenceOptions
             {
                 IncludeComments = false,
                 IncludeBaseTypes = true,
-                IncludeMemberFunctions = true
+                IncludeMemberFunctions = true,
+                IncludeDefinition = false
             },
             ct);
 
@@ -136,8 +158,11 @@ public class CommentStructsStage : StageBase
 === GUIDELINES ===
 {SystemPrompt}
 
+=== STRUCT ===
+{structDefinition}
+
 === REFERENCES ===
-{references}
+{contextReferences}
 
 === GENERATED COMMENT ===
 {generatedContent}

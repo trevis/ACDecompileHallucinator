@@ -54,20 +54,26 @@ public class CommentEnumsStage : StageBase
     protected override async Task<string> BuildPromptAsync(
         WorkItem item, IReadOnlyList<string> failureHistory, string? previousResponse, CancellationToken ct)
     {
-        var references = await ReferenceGenerator.GenerateEnumReferenceAsync(
+        var enumDefinition = await ReferenceGenerator.GenerateEnumReferenceAsync(
             item.EntityId,
-            new ReferenceOptions { IncludeComments = false },
+            new ReferenceOptions { IncludeComments = false, IncludeReferencingFunctions = false },
+            ct);
+
+        var referencingFunctions = await ReferenceGenerator.GenerateEnumReferenceAsync(
+            item.EntityId,
+            new ReferenceOptions
+                { IncludeComments = false, IncludeReferencingFunctions = true, IncludeDefinition = false },
             ct);
 
         var builder = new PromptBuilder()
             .WithSystemMessage(SystemPrompt)
-            .WithReferences(references)
+            .WithReferences(referencingFunctions)
             .WithRetryFeedback(failureHistory)
             .WithPreviousResponse(previousResponse)
             .WithFewShotExample(
                 FewShotExamples.EnumInput1,
                 FewShotExamples.EnumOutput1)
-            .WithInput(references);
+            .WithInput(enumDefinition);
 
         return builder.Build();
     }
@@ -114,9 +120,15 @@ public class CommentEnumsStage : StageBase
     protected override async Task<string> BuildLlmVerificationPromptAsync(
         WorkItem item, string generatedContent, CancellationToken ct)
     {
-        var references = await ReferenceGenerator.GenerateEnumReferenceAsync(
+        var enumDefinition = await ReferenceGenerator.GenerateEnumReferenceAsync(
             item.EntityId,
-            new ReferenceOptions { IncludeComments = false },
+            new ReferenceOptions { IncludeComments = false, IncludeReferencingFunctions = false },
+            ct);
+
+        var referencingFunctions = await ReferenceGenerator.GenerateEnumReferenceAsync(
+            item.EntityId,
+            new ReferenceOptions
+                { IncludeComments = false, IncludeReferencingFunctions = true, IncludeDefinition = false },
             ct);
 
         return
@@ -125,8 +137,11 @@ public class CommentEnumsStage : StageBase
 === GUIDELINES ===
 {SystemPrompt}
 
+=== ENUM ===
+{enumDefinition}
+
 === REFERENCES ===
-{references}
+{referencingFunctions}
 
 === GENERATED COMMENT ===
 {generatedContent}

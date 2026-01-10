@@ -152,20 +152,26 @@ public class ReferenceTextGenerator : IReferenceTextGenerator
 
         var header = await GetCommentHeaderAsync(options, EntityType.Struct, structId);
 
-        if (!string.IsNullOrEmpty(structType.Source))
+        if (options.IncludeDefinition)
         {
-            return header + structType.Source;
+            if (!string.IsNullOrEmpty(structType.Source))
+            {
+                return header + structType.Source;
+            }
+
+            // Pre-load members if not already loaded by GetTypeById
+            if (!structType.StructMembers.Any())
+            {
+                structType.StructMembers = _repository.GetStructMembers(structId);
+            }
+
+            var tokens = _classGenerator.Generate(structType);
+            return header + TokensToString(tokens);
         }
 
-        // Pre-load members if not already loaded by GetTypeById
-        if (structType.StructMembers == null || !structType.StructMembers.Any())
-        {
-            structType.StructMembers = _repository.GetStructMembers(structId);
-        }
-
-        var tokens = _classGenerator.Generate(structType);
-        return header + TokensToString(tokens);
+        return header;
     }
+
     public async Task<string> GenerateEnumReferenceAsync(
         int enumId, ReferenceOptions options, CancellationToken ct = default)
     {
@@ -178,37 +184,44 @@ public class ReferenceTextGenerator : IReferenceTextGenerator
         var header = await GetCommentHeaderAsync(options, EntityType.Enum, enumId);
         sb.Append(header);
 
-        if (!string.IsNullOrEmpty(enumType.Source))
+        if (options.IncludeDefinition)
         {
-            sb.Append(enumType.Source);
-        }
-        else
-        {
-            var tokens = _enumGenerator.Generate(enumType);
-            sb.Append(TokensToString(tokens));
+            if (!string.IsNullOrEmpty(enumType.Source))
+            {
+                sb.Append(enumType.Source);
+            }
+            else
+            {
+                var tokens = _enumGenerator.Generate(enumType);
+                sb.Append(TokensToString(tokens));
+            }
         }
 
         // Add referencing functions
-        var referencingFunctions = await _typeDb.FunctionBodies
-            .Where(f => f.BodyText.Contains(enumType.BaseName))
-            .Take(20)
-            .ToListAsync(ct);
-
-        if (referencingFunctions.Any())
+        if (options.IncludeReferencingFunctions)
         {
-            sb.AppendLine();
-            sb.AppendLine();
-            sb.AppendLine("=== REFERENCING FUNCTIONS ===");
-            foreach (var func in referencingFunctions)
+            var referencingFunctions = await _typeDb.FunctionBodies
+                .Where(f => f.BodyText.Contains(enumType.BaseName))
+                .Take(20)
+                .ToListAsync(ct);
+
+            if (referencingFunctions.Any())
             {
                 sb.AppendLine();
-                sb.AppendLine($"// From {func.FullyQualifiedName}");
-                sb.AppendLine(func.BodyText);
+                sb.AppendLine();
+                sb.AppendLine("=== REFERENCING FUNCTIONS ===");
+                foreach (var func in referencingFunctions)
+                {
+                    sb.AppendLine();
+                    sb.AppendLine($"// From {func.FullyQualifiedName}");
+                    sb.AppendLine(func.BodyText);
+                }
             }
         }
 
         return sb.ToString();
     }
+
     private async Task<string> GetCommentHeaderAsync(ReferenceOptions options, EntityType entityType, int entityId)
     {
         if (options.IncludeComments && options.CommentsFromStage != null)

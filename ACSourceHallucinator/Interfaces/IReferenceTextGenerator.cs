@@ -52,4 +52,10 @@ public record ReferenceOptions
 
     /// <summary>Include member function signatures and comments in struct references.</summary>
     public bool IncludeMemberFunctions { get; init; } = false;
+
+    /// <summary>Include function bodies that reference this enum (only for enums).</summary>
+    public bool IncludeReferencingFunctions { get; init; } = false;
+
+    /// <summary>Include the primary definition (source or tokens) of the type itself.</summary>
+    public bool IncludeDefinition { get; init; } = true;
 }
