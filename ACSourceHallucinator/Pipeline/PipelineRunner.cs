@@ -46,11 +46,15 @@ public class PipelineRunner
             // 1. Collect work items
             var allItems = await stage.CollectWorkItemsAsync(options.DebugFilterFqn, ct);
 
-            // 2. Filter out already-completed items (resumability)
-            var completedIds = await _resultRepo.GetCompletedEntityIdsAsync(stage.Name);
-            var pendingItems = allItems
-                .Where(item => !completedIds.Contains((item.EntityType, item.EntityId)))
-                .ToList();
+            // 2. Filter out already-completed items (resumability) unless force is requested
+            var pendingItems = allItems;
+            if (!options.ForceRegeneration)
+            {
+                var completedIds = await _resultRepo.GetCompletedEntityIdsAsync(stage.Name);
+                pendingItems = allItems
+                    .Where(item => !completedIds.Contains((item.EntityType, item.EntityId)))
+                    .ToList();
+            }
 
             _tui.SetTotalItems(allItems.Count, pendingItems.Count);
 
