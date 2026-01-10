@@ -1,0 +1,89 @@
+
+
+<div class="right-sidebar @(_isOpen ? "open" : "closed")">
+    <div class="sidebar-toggle" @onclick="ToggleSidebar">
+        @if (_isOpen)
+        {
+            <span class="oi oi-chevron-right" aria-hidden="true">»</span>
+        }
+        else
+        {
+            <span class="oi oi-chevron-left" aria-hidden="true">«</span>
+        }
+    </div>
+    <div class="sidebar-content">
+        @ChildContent
+    </div>
+</div>
+
+<style>
+    .right-sidebar {
+        height: 100%;
+        background-color: var(--bg-secondary);
+        border-left: 1px solid var(--border-color);
+        transition: width 0.3s ease;
+        display: flex;
+        flex-direction: row;
+        position: relative;
+    }
+
+    .right-sidebar.open {
+        width: 300px;
+    }
+
+    .right-sidebar.closed {
+        width: 0;
+        border-left: none; /* Hide border when closed to perfectly hide */
+    }
+
+    .sidebar-content {
+        flex: 1;
+        overflow-y: auto;
+        overflow-x: hidden;
+        min-width: 300px; /* Ensure content doesn't squash during transition */
+        opacity: 1;
+        transition: opacity 0.2s ease;
+    }
+    
+    .right-sidebar.closed .sidebar-content {
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    .sidebar-toggle {
+        position: absolute;
+        left: -24px;
+        top: 50%;
+        width: 24px;
+        height: 48px;
+        background-color: var(--bg-secondary);
+        border: 1px solid var(--border-color);
+        border-right: none;
+        border-radius: 8px 0 0 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        z-index: 10;
+        color: var(--text-secondary);
+        font-weight: bold;
+    }
+
+    .sidebar-toggle:hover {
+        background-color: var(--hover-bg);
+        color: var(--link-color);
+    }
+</style>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string Title { get; set; } = "Sidebar";
+
+    private bool _isOpen = true;
+
+    private void ToggleSidebar()
+    {
+        _isOpen = !_isOpen;
+    }
+
+}

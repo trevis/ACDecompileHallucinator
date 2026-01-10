@@ -184,3 +184,7 @@ h1:focus {
 #dotnet-compile-error {
     display: none !important;
 }
+
+body .content {
+    padding-top: 0px;
+}

@@ -1,0 +1,40 @@
+@using ACDecompileParser.Shared.Lib.Models
+@using ACDecompileParser.Shared.Lib.Output.CSharp
+@inject CSharpGroupProcessor CSharpProcessor
+
+<div class="code-view">
+    <pre><code class="language-csharp">@RenderCSharpBindings()</code></pre>
+</div>
+
+@code {
+    [Parameter] public List<TypeModel>? TypeGroup { get; set; }
+
+    private string? _cachedCSharpBindings;
+    private List<TypeModel>? _cachedTypeGroup;
+
+    protected override void OnParametersSet()
+    {
+        if (!ReferenceEquals(TypeGroup, _cachedTypeGroup))
+        {
+            _cachedTypeGroup = TypeGroup;
+            _cachedCSharpBindings = null;
+        }
+    }
+
+    private string GetCachedCSharpBindings()
+    {
+        if (_cachedCSharpBindings != null)
+            return _cachedCSharpBindings;
+
+        if (TypeGroup == null || !TypeGroup.Any())
+            return string.Empty;
+
+        _cachedCSharpBindings = CSharpProcessor.GenerateGroupContent(TypeGroup, includeNamespace: false);
+        return _cachedCSharpBindings;
+    }
+
+    private string RenderCSharpBindings()
+    {
+        return GetCachedCSharpBindings();
+    }
+}

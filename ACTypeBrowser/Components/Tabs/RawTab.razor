@@ -1,0 +1,21 @@
+@using ACDecompileParser.Shared.Lib.Models
+
+<div class="code-view">
+    @if (TypeGroup != null)
+    {
+        @foreach (var type in TypeGroup)
+        {
+            <div class="mb-4">
+                @if (TypeGroup.Count > 1)
+                {
+                    <h5>@type.NameWithTemplates</h5>
+                }
+                <pre><code class="language-cpp">@type.Source</code></pre>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public List<TypeModel>? TypeGroup { get; set; }
+}

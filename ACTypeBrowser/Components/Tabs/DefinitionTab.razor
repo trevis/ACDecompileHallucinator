@@ -1,0 +1,82 @@
+@using ACDecompileParser.Shared.Lib.Models
+@using ACDecompileParser.Shared.Lib.Output
+@using ACDecompileParser.Shared.Lib.Services
+@using ACDecompileParser.Shared.Lib.Output.Models
+@inject TypeLookupCache LookupCache
+@inject TypeGroupProcessor GroupProcessor
+
+<div class="code-view">
+    <pre><code class="nohighlight">@RenderTokens()</code></pre>
+</div>
+
+@code {
+    [Parameter] public List<TypeModel>? TypeGroup { get; set; }
+
+    private IEnumerable<CodeToken>? _cachedTokens;
+    private List<TypeModel>? _cachedTypeGroup;
+
+    protected override void OnParametersSet()
+    {
+        if (!ReferenceEquals(TypeGroup, _cachedTypeGroup))
+        {
+            _cachedTypeGroup = TypeGroup;
+            _cachedTokens = null;
+        }
+    }
+
+    private IEnumerable<CodeToken> GetTokens()
+    {
+        if (_cachedTokens != null)
+            return _cachedTokens;
+
+        if (TypeGroup == null || !TypeGroup.Any())
+            return Enumerable.Empty<CodeToken>();
+
+        _cachedTokens = GroupProcessor.GenerateGroupTokens(TypeGroup, includeHeaderAndNamespace: false).ToList();
+        return _cachedTokens;
+    }
+
+    private RenderFragment RenderTokens() => builder =>
+    {
+        var tokens = GetTokens();
+        int seq = 0;
+        foreach (var token in tokens)
+        {
+            if (!string.IsNullOrEmpty(token.ReferenceId) && int.TryParse(token.ReferenceId, out int id))
+            {
+                string href = "#";
+                if (LookupCache.TryGetEntry(id, out var entry) && entry != null)
+                {
+                    href = string.IsNullOrEmpty(entry.Namespace)
+                        ? $"/type/{entry.BaseName}"
+                        : $"/type/{entry.Namespace.Replace("::", "/")}/{entry.BaseName}";
+                }
+
+                builder.OpenElement(seq++, "a");
+                builder.AddAttribute(seq++, "href", href);
+                builder.AddAttribute(seq++, "class", $"type-link {GetTokenClass(token.Type)}");
+                builder.AddContent(seq++, token.Text);
+                builder.CloseElement();
+            }
+            else
+            {
+                builder.OpenElement(seq++, "span");
+                builder.AddAttribute(seq++, "class", GetTokenClass(token.Type));
+                builder.AddContent(seq++, token.Text);
+                builder.CloseElement();
+            }
+        }
+    };
+
+    private string GetTokenClass(TokenType type) => type switch
+    {
+        TokenType.Keyword => "token-keyword",
+        TokenType.TypeName => "token-typename",
+        TokenType.StringLiteral => "token-string",
+        TokenType.Comment => "token-comment",
+        TokenType.NumberLiteral => "token-number",
+        TokenType.Punctuation => "token-punctuation",
+        TokenType.Identifier => "token-identifier",
+        _ => ""
+    };
+}

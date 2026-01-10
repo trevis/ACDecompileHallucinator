@@ -3,44 +3,15 @@
 @using ACSourceHallucinator.Models
 @using ACSourceHallucinator.Enums
 @using ACSourceHallucinator.Data.Entities
+@using ACTypeBrowser.Components.Common
 @inject IStageResultRepository ResultRepository
 
 <div class="pipeline-container">
-    <!-- Sidebar -->
-    <div class="pipeline-sidebar">
-        <h5 class="p-3 mb-0 border-bottom">Pipeline Flow</h5>
-        <div class="list-group list-group-flush">
-            <button class="list-group-item list-group-item-action @(_selectedEntity == Type ? "active" : "")"
-                    @onclick="() => SelectEntity(Type)">
-                <div class="d-flex w-100 justify-content-between">
-                    <h6 class="mb-1 text-truncate" title="@Type.NameWithTemplates">@Type.NameWithTemplates</h6>
-                </div>
-                <small>Main Struct</small>
-            </button>
-
-            @if (Type.FunctionBodies.Any())
-            {
-                <div class="sidebar-header p-2 text-uppercase font-weight-bold smaller" style="border-bottom: 1px solid var(--border-color);">
-                    Methods (@Type.FunctionBodies.Count)
-                </div>
-                @foreach (var func in Type.FunctionBodies.OrderBy(f => f.Name))
-                {
-                    <button class="list-group-item list-group-item-action @(_selectedEntity == func ? "active" : "")"
-                            @onclick="() => SelectEntity(func)">
-                        <div class="d-flex w-100 justify-content-between" style="min-width: 0;">
-                            <h6 class="mb-1 text-truncate" title="@func.Name">@func.Name</h6>
-                        </div>
-                    </button>
-                }
-            }
-        </div>
-    </div>
-
     <!-- Main Content -->
     <div class="pipeline-content p-4">
         @if (_selectedEntity is FunctionBodyModel funcModel)
         {
-            <h3 class="mb-4" style="font-family: 'Consolas', 'Monaco', monospace;">@funcModel.Source</h3>
+            <h5 class="mb-4" style="font-family: 'Consolas', 'Monaco', monospace;">@funcModel.Source</h5>
         }
 
         @if (_isLoading)
@@ -59,7 +30,14 @@
         }
         else
         {
-            @foreach (var result in _selectedResults)
+            @if (!string.IsNullOrEmpty(_errorMessage))
+            {
+                <div class="alert alert-danger">
+                    @_errorMessage
+                </div>
+            }
+
+            @foreach (var result in _selectedResults ?? Enumerable.Empty<StageResult>())
             {
                 <div class="card mb-4">
                     <div class="card-header d-flex justify-content-between align-items-center">
@@ -82,11 +60,11 @@
                                                 <div class="d-flex w-100 justify-content-between align-items-center me-3">
                                                     <span>@GetRequestType(log) (Attempt @(log.Attempt + 1))</span>
                                                     <div class="d-flex gap-2">
+                                                        <span class="badge bg-secondary" title="Tokens">@log.PromptTokens / @log.CompletionTokens tok</span>
                                                         <span class="badge @(log.IsSuccess ? "bg-success" : "bg-danger")">
                                                             @(log.IsSuccess ? "Success" : "Failed")
                                                         </span>
-                                                        <span class="badge bg-secondary">@log.DurationMs ms</span>
-                                                        <span class="badge bg-info text-dark">@log.Model</span>
+                                                        <span class="badge bg-secondary">@((log.DurationMs / 1000.0).ToString("0.##"))s</span>
                                                     </div>
                                                 </div>
                                             </button>
@@ -124,6 +102,36 @@
             }
         }
     </div>
+
+    <!-- Sidebar -->
+    <RightSidebar Title="Pipeline Flow">
+        <h5 class="p-3 mb-0 border-bottom">Pipeline Flow</h5>
+        <div class="list-group list-group-flush">
+            <button class="list-group-item list-group-item-action @(_selectedEntity == Type ? "active" : "")"
+                    @onclick="() => SelectEntity(Type)">
+                <div class="d-flex w-100 justify-content-between">
+                    <h6 class="mb-1 text-truncate" title="@Type.NameWithTemplates">@Type.NameWithTemplates</h6>
+                </div>
+                <small>Main Struct</small>
+            </button>
+
+            @if (Type.FunctionBodies.Any())
+            {
+                <div class="sidebar-header p-2 text-uppercase font-weight-bold smaller" style="border-bottom: 1px solid var(--border-color);">
+                    Methods (@Type.FunctionBodies.Count)
+                </div>
+                @foreach (var func in Type.FunctionBodies.OrderBy(f => f.Name))
+                {
+                    <button class="list-group-item list-group-item-action @(_selectedEntity == func ? "active" : "")"
+                            @onclick="() => SelectEntity(func)">
+                        <div class="d-flex w-100 justify-content-between" style="min-width: 0;">
+                            <h6 class="mb-1 text-truncate" title="@func.Name">@func.Name</h6>
+                        </div>
+                    </button>
+                }
+            }
+        </div>
+    </RightSidebar>
 </div>
 
 <style>
@@ -131,20 +139,14 @@
         display: flex;
         height: 100%; /* Fill available height */
         overflow: hidden;
-    }
-
-    .pipeline-sidebar {
-        width: 300px;
-        border-right: 1px solid var(--border-color);
-        overflow-y: auto;
-        flex-shrink: 0;
-        background-color: var(--bg-secondary);
+        flex-direction: row; /* Ensure main content is left, sidebar right */
     }
 
     .pipeline-content {
         flex-grow: 1;
         overflow-y: auto;
         background-color: var(--bg-primary);
+        min-width: 0; /* Allow shrinking */
     }
     
     .list-group-item {
@@ -235,6 +237,7 @@
     private List<StageResult>? _selectedResults;
     private bool _isLoading;
     private HashSet<int> _expandedLogIds = new();
+    private string? _errorMessage;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -247,7 +250,10 @@
     private async Task SelectEntity(object entity)
     {
         _selectedEntity = entity;
+        _selectedResults = null;
+        _errorMessage = null;
         _isLoading = true;
+        _expandedLogIds.Clear();
 
         try
         {
@@ -264,6 +270,11 @@
                 // Assuming FunctionBodyModel maps to StructMethod
                 _selectedResults = await ResultRepository.GetResultsWithLogsAsync(EntityType.StructMethod, func.Id);
             }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Error loading pipeline data: {ex.Message}";
+            Console.WriteLine(ex);
         }
         finally
         {

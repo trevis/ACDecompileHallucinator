@@ -1,0 +1,58 @@
+@using ACDecompileParser.Shared.Lib.Models
+
+<div class="statics-view">
+    <table class="table table-dark table-hover table-sm mb-0">
+        <thead>
+        <tr>
+            <th>Address</th>
+            <th>Type</th>
+            <th>Name</th>
+            <th>Value</th>
+        </tr>
+        </thead>
+        <tbody>
+        @if (TypeGroup != null)
+        {
+            @foreach (var type in TypeGroup)
+            {
+                @if (type.StaticVariables != null)
+                {
+                    @foreach (var sv in type.StaticVariables)
+                    {
+                        <tr>
+                            <td class="text-muted">
+                                <code>@NormalizeAddress(sv.Address)</code>
+                            </td>
+                            <td>
+                                <code>@sv.TypeString</code>
+                            </td>
+                            <td class="text-info">
+                                <code>@sv.Name</code>
+                            </td>
+                            <td>
+                                <code>@sv.Value</code>
+                            </td>
+                        </tr>
+                    }
+                }
+            }
+        }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    [Parameter] public List<TypeModel>? TypeGroup { get; set; }
+
+    private string NormalizeAddress(string address)
+    {
+        if (string.IsNullOrEmpty(address)) return address;
+        string clean = address.StartsWith("0x", StringComparison.OrdinalIgnoreCase) ? address.Substring(2) : address;
+        if (long.TryParse(clean, System.Globalization.NumberStyles.HexNumber, null, out long val))
+        {
+            return $"0x{val:X8}";
+        }
+
+        return address;
+    }
+}
