@@ -15,7 +15,8 @@ public record TypeLookupEntry(int Id, string BaseName, string Namespace, string?
 /// </summary>
 public class TypeLookupCache
 {
-    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IServiceScopeFactory? _scopeFactory;
+    private readonly ITypeRepository? _directRepository;
     private Dictionary<int, TypeLookupEntry>? _byId;
     private Dictionary<string, int>? _byFqn;
     private Dictionary<string, List<int>>? _byBaseName;
@@ -25,6 +26,11 @@ public class TypeLookupCache
     public TypeLookupCache(IServiceScopeFactory scopeFactory)
     {
         _scopeFactory = scopeFactory;
+    }
+
+    public TypeLookupCache(ITypeRepository repository)
+    {
+        _directRepository = repository;
     }
 
     /// <summary>
@@ -39,10 +45,19 @@ public class TypeLookupCache
         {
             if (_isLoaded) return;
 
-            using var scope = _scopeFactory.CreateScope();
-            var repository = scope.ServiceProvider.GetRequiredService<ITypeRepository>();
+            List<(int Id, string BaseName, string Namespace, string? StoredFqn)> data;
 
-            var data = repository.GetTypeLookupData();
+            if (_directRepository != null)
+            {
+                data = _directRepository.GetTypeLookupData();
+            }
+            else
+            {
+                using var scope = _scopeFactory!.CreateScope();
+                var repository = scope.ServiceProvider.GetRequiredService<ITypeRepository>();
+                data = repository.GetTypeLookupData();
+            }
+
             _byId = new Dictionary<int, TypeLookupEntry>();
             _byFqn = new Dictionary<string, int>(StringComparer.Ordinal);
             _byBaseName = new Dictionary<string, List<int>>(StringComparer.Ordinal);

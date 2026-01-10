@@ -58,6 +58,110 @@ public class InMemoryTypeRepository : ITypeRepository
         _scopeFactory = scopeFactory;
     }
 
+    // Batch Mode Support
+    public bool BatchMode { get; set; } = false;
+    private readonly HashSet<int> _dirtyTypeIds = new();
+    private readonly HashSet<int> _dirtyTypeReferenceIds = new();
+    private readonly HashSet<int> _dirtyTypeInheritanceIds = new();
+    private readonly HashSet<int> _dirtyTypeTemplateArgumentIds = new();
+    private readonly HashSet<int> _dirtyStructMemberIds = new();
+
+    public void LoadFromCache(IEnumerable<TypeModel> types, IEnumerable<TypeReference>? typeRefs = null)
+    {
+        lock (_lock)
+        {
+            _isLoaded = true;
+            Console.WriteLine("InMemoryTypeRepository: Priming from cache...");
+
+            // Clear existing if any? Or Merge? Assuming empty or overwrite for build process.
+            // For safety, let's just populate.
+
+            foreach (var t in types)
+            {
+                _typesById[t.Id] = t;
+                if (!string.IsNullOrEmpty(t.StoredFullyQualifiedName))
+                    _typesByFqn[t.StoredFullyQualifiedName] = t;
+
+                if (!_typesByNamespace.TryGetValue(t.Namespace, out var nsList))
+                {
+                    nsList = new List<TypeModel>();
+                    _typesByNamespace[t.Namespace] = nsList;
+                }
+
+                nsList.Add(t);
+
+                if (!_typesByBaseName.TryGetValue(t.BaseName, out var bnList))
+                {
+                    bnList = new List<TypeModel>();
+                    _typesByBaseName[t.BaseName] = bnList;
+                }
+
+                bnList.Add(t);
+            }
+
+            if (typeRefs != null)
+            {
+                foreach (var tr in typeRefs)
+                {
+                    _typeReferencesById[tr.Id] = tr;
+                    if (tr.ReferencedTypeId == null && !string.IsNullOrEmpty(tr.TypeString))
+                    {
+                        _unresolvedTypeReferences.Add(tr);
+                    }
+                }
+            }
+
+            // Also need to populate indices for navigation if they are already linked in the input models
+            // For the specific use case of offsets/resolution, we mostly read TypeModels and TypeReferences.
+            // Re-building the inheritance/template arg indices is expensive if we do it from scratch, 
+            // but if the input 'types' have them populated, we can extract them.
+
+            foreach (var t in _typesById.Values)
+            {
+                foreach (var ta in t.TemplateArguments)
+                {
+                    _templateArgumentsById[ta.Id] = ta;
+                    if (!_templateArgsByParentId.ContainsKey(ta.ParentTypeId))
+                        _templateArgsByParentId[ta.ParentTypeId] = new List<TypeTemplateArgument>();
+                    _templateArgsByParentId[ta.ParentTypeId].Add(ta);
+                    if (ta.TypeReferenceId == null) _unresolvedTemplateArguments.Add(ta);
+                }
+
+                foreach (var bt in t.BaseTypes)
+                {
+                    _typeInheritancesById[bt.Id] = bt;
+
+                    if (!_baseTypesByDerivedId.ContainsKey(bt.ParentTypeId))
+                        _baseTypesByDerivedId[bt.ParentTypeId] = new List<TypeInheritance>();
+                    _baseTypesByDerivedId[bt.ParentTypeId].Add(bt);
+
+                    if (bt.RelatedTypeId.HasValue)
+                    {
+                        if (!_derivedTypesByBaseId.ContainsKey(bt.RelatedTypeId.Value))
+                            _derivedTypesByBaseId[bt.RelatedTypeId.Value] = new List<TypeInheritance>();
+                        _derivedTypesByBaseId[bt.RelatedTypeId.Value].Add(bt);
+                    }
+                    else
+                    {
+                        _unresolvedInheritances.Add(bt);
+                    }
+                }
+
+                foreach (var sm in t.StructMembers)
+                {
+                    _structMembersById[sm.Id] = sm;
+                    if (!_structMembersByStructId.ContainsKey(sm.StructTypeId))
+                        _structMembersByStructId[sm.StructTypeId] = new List<StructMemberModel>();
+                    _structMembersByStructId[sm.StructTypeId].Add(sm);
+                }
+            }
+
+            Console.WriteLine($"InMemoryTypeRepository: Primed with {_typesById.Count} types.");
+            _isLoaded = true;
+        }
+    }
+
+
     public void EnsureLoaded()
     {
         if (_isLoaded) return;
@@ -201,12 +305,170 @@ public class InMemoryTypeRepository : ITypeRepository
             $"InMemoryTypeRepository: Loaded {_typesById.Count} types, {_typeReferencesById.Count} refs.");
     }
 
-    public void Dispose()
+    public void SaveChanges()
     {
-        // Nothing to dispose in memory structures
+        if (!BatchMode) return;
+
+        lock (_lock)
+        {
+            Console.WriteLine("InMemoryTypeRepository: Flushing changes to database...");
+            using var scope = _scopeFactory.CreateScope();
+            // Resolve directly to avoid using this InMemory wrapper if it was registered as ITypeRepository (though here we likely resolve SqlTypeRepository explicitly)
+            var repo = scope.ServiceProvider.GetRequiredService<SqlTypeRepository>();
+            // Use transaction for consistency
+            using var transaction = repo.BeginTransaction();
+
+            try
+            {
+                int count = 0;
+
+                // Flush Types
+                if (_dirtyTypeIds.Any())
+                {
+                    foreach (var id in _dirtyTypeIds)
+                    {
+                        if (_typesById.TryGetValue(id, out var t))
+                        {
+                            repo.UpdateType(t);
+                            count++;
+                        }
+                    }
+
+                    _dirtyTypeIds.Clear();
+                }
+
+                // Flush TypeReferences
+                // Flush Types first? (If any)
+
+                // Flush TypeReferences
+                if (_dirtyTypeReferenceIds.Any())
+                {
+                    int c = 0;
+                    foreach (var id in _dirtyTypeReferenceIds)
+                    {
+                        if (_typeReferencesById.TryGetValue(id, out var tr))
+                        {
+                            repo.UpdateTypeReference(tr);
+                            c++;
+                        }
+                    }
+
+                    if (c > 0)
+                    {
+                        Console.WriteLine($"InMemoryTypeRepository: Flushing {c} TypeReferences...");
+                        repo.SaveChanges();
+                    }
+
+                    _dirtyTypeReferenceIds.Clear();
+                }
+
+                // Flush Inheritances
+                if (_dirtyTypeInheritanceIds.Any())
+                {
+                    int c = 0;
+                    foreach (var id in _dirtyTypeInheritanceIds)
+                    {
+                        if (_typeInheritancesById.TryGetValue(id, out var ti))
+                        {
+                            repo.UpdateTypeInheritance(ti);
+                            c++;
+                        }
+                    }
+
+                    if (c > 0)
+                    {
+                        Console.WriteLine($"InMemoryTypeRepository: Flushing {c} TypeInheritances...");
+                        repo.SaveChanges();
+                    }
+
+                    _dirtyTypeInheritanceIds.Clear();
+                }
+
+                // Flush Template Arguments
+                if (_dirtyTypeTemplateArgumentIds.Any())
+                {
+                    int c = 0;
+                    foreach (var id in _dirtyTypeTemplateArgumentIds)
+                    {
+                        if (_templateArgumentsById.TryGetValue(id, out var ta))
+                        {
+                            repo.UpdateTypeTemplateArgument(ta);
+                            c++;
+                        }
+                    }
+
+                    if (c > 0)
+                    {
+                        Console.WriteLine($"InMemoryTypeRepository: Flushing {c} TypeTemplateArguments...");
+                        try
+                        {
+                            repo.SaveChanges();
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine(
+                                $"InMemoryTypeRepository: Error saving TypeTemplateArguments: {ex.Message}");
+                            // Diagnosis
+                            foreach (var id in _dirtyTypeTemplateArgumentIds)
+                            {
+                                if (_templateArgumentsById.TryGetValue(id, out var ta))
+                                {
+                                    bool parentExists = repo.GetAllTypes().Any(t => t.Id == ta.ParentTypeId);
+                                    bool refExists = ta.TypeReferenceId == null || repo.GetAllTypeReferences()
+                                        .Any(tr => tr.Id == ta.TypeReferenceId);
+
+                                    if (!parentExists)
+                                        Console.WriteLine(
+                                            $"CRITICAL: TA {id} references missing ParentType {ta.ParentTypeId}");
+                                    if (!refExists)
+                                        Console.WriteLine(
+                                            $"CRITICAL: TA {id} references missing TypeReference {ta.TypeReferenceId}");
+                                }
+                            }
+
+                            throw;
+                        }
+                    }
+
+                    _dirtyTypeTemplateArgumentIds.Clear();
+                }
+
+                // Flush Struct Members
+                if (_dirtyStructMemberIds.Any())
+                {
+                    int c = 0;
+                    foreach (var id in _dirtyStructMemberIds)
+                    {
+                        if (_structMembersById.TryGetValue(id, out var sm))
+                        {
+                            repo.UpdateStructMember(sm);
+                            c++;
+                        }
+                    }
+
+                    if (c > 0)
+                    {
+                        Console.WriteLine($"InMemoryTypeRepository: Flushing {c} StructMembers...");
+                        repo.SaveChanges();
+                    }
+
+                    _dirtyStructMemberIds.Clear();
+                }
+
+                transaction.Commit();
+                Console.WriteLine("InMemoryTypeRepository: Flush completed successfully.");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"InMemoryTypeRepository: Error flushing to database: {ex.Message}");
+                transaction.Rollback();
+                throw;
+            }
+        }
     }
 
-    // READ Operations - Serve from memory
+
+// READ Operations - Serve from memory
 
     public TypeModel? GetTypeById(int id)
     {
@@ -581,9 +843,9 @@ public class InMemoryTypeRepository : ITypeRepository
     }
 
 
-    // WRITE Operations - Pass through to backing store, then update memory
-    // WARNING: For meaningful updates, we should implement these.
-    // Ideally we reload the item from DB after write to get generated IDs and full structure.
+// WRITE Operations - Pass through to backing store, then update memory
+// WARNING: For meaningful updates, we should implement these.
+// Ideally we reload the item from DB after write to get generated IDs and full structure.
 
     public int InsertType(TypeModel type)
     {
@@ -623,14 +885,22 @@ public class InMemoryTypeRepository : ITypeRepository
     public void UpdateType(TypeModel type)
     {
         EnsureLoaded();
+
+        // Always update memory
+        _typesById[type.Id] = type;
+        if (!string.IsNullOrEmpty(type.StoredFullyQualifiedName))
+            _typesByFqn[type.StoredFullyQualifiedName] = type;
+
+        if (BatchMode)
+        {
+            lock (_lock) _dirtyTypeIds.Add(type.Id);
+            return;
+        }
+
         using var scope = _scopeFactory.CreateScope();
         var repo = scope.ServiceProvider.GetRequiredService<SqlTypeRepository>();
         repo.UpdateType(type);
         repo.SaveChanges();
-
-        // Update memory
-        _typesById[type.Id] = type;
-        // Updating indices is harder if keys changed. Assuming FQN/Namespace/BaseName don't change often or we don't care about stale index for now.
     }
 
     public void DeleteType(int id)
@@ -654,9 +924,16 @@ public class InMemoryTypeRepository : ITypeRepository
         EnsureLoaded();
         using var scope = _scopeFactory.CreateScope();
         var repo = scope.ServiceProvider.GetRequiredService<SqlTypeRepository>();
-        var id = repo.InsertTypeReference(typeReference);
+        repo.InsertTypeReference(typeReference);
         repo.SaveChanges();
-        typeReference.Id = id;
+        var id = typeReference.Id;
+
+        if (id <= 0)
+        {
+            throw new InvalidOperationException(
+                $"InsertTypeReference returned invalid ID {id} for type '{typeReference.TypeString}'");
+        }
+
         _typeReferencesById[id] = typeReference;
         return id;
     }
@@ -664,11 +941,18 @@ public class InMemoryTypeRepository : ITypeRepository
     public void UpdateTypeReference(TypeReference typeReference)
     {
         EnsureLoaded();
+        _typeReferencesById[typeReference.Id] = typeReference;
+
+        if (BatchMode)
+        {
+            lock (_lock) _dirtyTypeReferenceIds.Add(typeReference.Id);
+            return;
+        }
+
         using var scope = _scopeFactory.CreateScope();
         var repo = scope.ServiceProvider.GetRequiredService<SqlTypeRepository>();
         repo.UpdateTypeReference(typeReference);
         repo.SaveChanges();
-        _typeReferencesById[typeReference.Id] = typeReference;
     }
 
     public void DeleteTypeReference(int id)
@@ -693,9 +977,9 @@ public class InMemoryTypeRepository : ITypeRepository
         foreach (var tr in refsList) _typeReferencesById[tr.Id] = tr;
     }
 
-    // Implementing other methods similarly... 
-    // For brevity in this turn, I will implement the most common ones and throw or just implemented others as pass-through + reload for completeness in next edit if needed.
-    // Given the task is for BROWSER performance (READ-heavy), write support is secondary but required for interface.
+// Implementing other methods similarly... 
+// For brevity in this turn, I will implement the most common ones and throw or just implemented others as pass-through + reload for completeness in next edit if needed.
+// Given the task is for BROWSER performance (READ-heavy), write support is secondary but required for interface.
 
     public int InsertTypeTemplateArgument(TypeTemplateArgument typeTemplateArgument)
     {
@@ -712,11 +996,18 @@ public class InMemoryTypeRepository : ITypeRepository
     public void UpdateTypeTemplateArgument(TypeTemplateArgument typeTemplateArgument)
     {
         EnsureLoaded();
+        _templateArgumentsById[typeTemplateArgument.Id] = typeTemplateArgument;
+
+        if (BatchMode)
+        {
+            lock (_lock) _dirtyTypeTemplateArgumentIds.Add(typeTemplateArgument.Id);
+            return;
+        }
+
         using var scope = _scopeFactory.CreateScope();
         var repo = scope.ServiceProvider.GetRequiredService<SqlTypeRepository>();
         repo.UpdateTypeTemplateArgument(typeTemplateArgument);
         repo.SaveChanges();
-        _templateArgumentsById[typeTemplateArgument.Id] = typeTemplateArgument;
     }
 
     public int InsertTypeInheritance(TypeInheritance typeInheritance)
@@ -734,21 +1025,35 @@ public class InMemoryTypeRepository : ITypeRepository
     public void UpdateTypeInheritance(TypeInheritance typeInheritance)
     {
         EnsureLoaded();
+        _typeInheritancesById[typeInheritance.Id] = typeInheritance;
+
+        if (BatchMode)
+        {
+            lock (_lock) _dirtyTypeInheritanceIds.Add(typeInheritance.Id);
+            return;
+        }
+
         using var scope = _scopeFactory.CreateScope();
         var repo = scope.ServiceProvider.GetRequiredService<SqlTypeRepository>();
         repo.UpdateTypeInheritance(typeInheritance);
         repo.SaveChanges();
-        _typeInheritancesById[typeInheritance.Id] = typeInheritance;
     }
 
     public void UpdateStructMember(StructMemberModel structMember)
     {
         EnsureLoaded();
+        _structMembersById[structMember.Id] = structMember;
+
+        if (BatchMode)
+        {
+            lock (_lock) _dirtyStructMemberIds.Add(structMember.Id);
+            return;
+        }
+
         using var scope = _scopeFactory.CreateScope();
         var repo = scope.ServiceProvider.GetRequiredService<SqlTypeRepository>();
         repo.UpdateStructMember(structMember);
         repo.SaveChanges();
-        _structMembersById[structMember.Id] = structMember;
     }
 
     public int InsertEnumMember(EnumMemberModel enumMember)
@@ -923,9 +1228,83 @@ public class InMemoryTypeRepository : ITypeRepository
 
     public void ResolveTypeReferences()
     {
-        using var scope = _scopeFactory.CreateScope();
-        var repo = scope.ServiceProvider.GetRequiredService<SqlTypeRepository>();
-        repo.ResolveTypeReferences();
+        EnsureLoaded();
+
+        if (!BatchMode)
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var repo = scope.ServiceProvider.GetRequiredService<SqlTypeRepository>();
+            repo.ResolveTypeReferences();
+            return;
+        }
+
+        Console.WriteLine("InMemoryTypeRepository: Resolving type references in memory...");
+        int resolvedCount = 0;
+
+        // Resolve TypeReferences
+        foreach (var tr in
+                 _unresolvedTypeReferences
+                     .ToList()) // ToList to allow modification of collection if needed (though we just modify items)
+        {
+            if (tr.ReferencedTypeId != null) continue;
+
+            var baseName = ACDecompileParser.Shared.Lib.Utilities.ParsingUtilities.ExtractBaseTypeName(tr.TypeString);
+            // Search in types
+            // Try FQN match first (if TypeString is FQN) or stored FQN
+            // But usually TypeString is just a name or partial.
+            // Logic typically matches BaseName against Types. 
+            // See SqlTypeRepository logic or SourceParser logic.
+            // SourceParser logic: typeByFqn.TryGetValue(baseName, out var referencedType)
+            // But baseName variable above extracts base type name.
+
+            // We need a lookup by stored FQN or Name.
+            // In SourceParser it used `typeModelsByFqn`.
+            // Here `_typesByFqn` is keyed by stored FQN.
+
+            // Try direct FQN match
+            if (_typesByFqn.TryGetValue(tr.TypeString, out var match))
+            {
+                tr.ReferencedTypeId = match.Id;
+                UpdateTypeReference(tr);
+                resolvedCount++;
+            }
+            else if (_typesByFqn.TryGetValue(baseName, out match))
+            {
+                tr.ReferencedTypeId = match.Id;
+                UpdateTypeReference(tr);
+                resolvedCount++;
+            }
+            // Fallback: search by Name? That's dangerous. FQN is best.
+        }
+
+        // Resolve Inheritances
+        foreach (var inh in _unresolvedInheritances.ToList())
+        {
+            if (inh.RelatedTypeId != null) continue;
+            if (string.IsNullOrEmpty(inh.RelatedTypeString)) continue;
+
+            if (_typesByFqn.TryGetValue(inh.RelatedTypeString, out var match))
+            {
+                inh.RelatedTypeId = match.Id;
+                UpdateTypeInheritance(inh);
+                resolvedCount++;
+            }
+        }
+
+        // Resolve Template Arguments?
+        // SourceParser did it.
+        foreach (var ta in _unresolvedTemplateArguments.ToList())
+        {
+            if (ta.TypeReferenceId != null) continue;
+            // Usually calls CreateTypeReference if missing.
+            // We can check if a TypeReference exists for this TypeString.
+            // But we don't have a fast lookup for TypeRefs by string unless we build it.
+            // _typeReferencesById is by ID.
+            // We can skip this for now or implement it if critical.
+            // If we skip, they remain unresolved until next pass?
+        }
+
+        Console.WriteLine($"InMemoryTypeRepository: Resolved {resolvedCount} references in memory.");
     }
 
     public int GetUnresolvedTypeCount()
@@ -962,19 +1341,60 @@ public class InMemoryTypeRepository : ITypeRepository
 
     public void PopulateBaseTypePaths(List<TypeModel> allTypes)
     {
-        // This is a heavy operation, usually done at import.
-        using var scope = _scopeFactory.CreateScope();
-        var repo = scope.ServiceProvider.GetRequiredService<SqlTypeRepository>();
-        repo.PopulateBaseTypePaths(allTypes);
-        // Then we should probably reload memory or update these instances.
-        // Since `allTypes` are passed in, they might be memory objects so they get updated?
-        // If allTypes are from _typesById.Values, then updating them updates memory.
+        EnsureLoaded();
+
+        if (!BatchMode)
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var repo = scope.ServiceProvider.GetRequiredService<SqlTypeRepository>();
+            repo.PopulateBaseTypePaths(allTypes);
+            return;
+        }
+
+        Console.WriteLine("InMemoryTypeRepository: Populating BaseTypePaths in memory...");
+        // Iterate all types, find base types, build path.
+        // Similar to SQL logic but walking objects.
+
+        int updated = 0;
+        foreach (var type in allTypes)
+        {
+            // Find base type
+            // We rely on Resolved References.
+            // Type -> BaseTypes (Inheritance) -> RelatedType (TypeModel)
+            // We need to find the primary base class (not interfaces).
+            // Assuming single inheritance for BaseTypePath or C++ primary base.
+            // Actually parsing logic puts BaseTypes in order. First one might be it.
+            // Or relatedType FQN.
+
+            // Simplification: We want the FQN of the base type.
+            var baseTypeInh = type.BaseTypes.OrderBy(x => x.Order).FirstOrDefault();
+            if (baseTypeInh != null)
+            {
+                string? basePath = null;
+                if (baseTypeInh.RelatedTypeId.HasValue)
+                {
+                    if (_typesById.TryGetValue(baseTypeInh.RelatedTypeId.Value, out var baseType))
+                    {
+                        basePath = baseType.StoredFullyQualifiedName;
+                    }
+                }
+                else if (!string.IsNullOrEmpty(baseTypeInh.RelatedTypeString))
+                {
+                    basePath = baseTypeInh.RelatedTypeString;
+                }
+
+                if (basePath != null && type.BaseTypePath != basePath)
+                {
+                    type.BaseTypePath = basePath;
+                    UpdateBaseTypePath(type.Id, basePath); // Updates memory & dirties
+                    updated++;
+                }
+            }
+        }
+
+        Console.WriteLine($"InMemoryTypeRepository: Populated {updated} BaseTypePaths.");
     }
 
-    public void SaveChanges()
-    {
-        // No-op for memory part, backing store calls usually save immediately in my wrappers above.
-    }
 
     public Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction BeginTransaction()
     {
@@ -1023,5 +1443,10 @@ public class InMemoryTypeRepository : ITypeRepository
         repo.InsertStaticVariables(list);
         repo.SaveChanges();
         foreach (var sv in list) _staticVariablesById[sv.Id] = sv;
+    }
+
+    public void Dispose()
+    {
+        // Nothing to dispose in memory structures
     }
 }

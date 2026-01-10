@@ -167,6 +167,8 @@ public class InlineNamespaceTests
             });
         mockRepo.Setup(r => r.GetStaticVariablesForType(It.IsAny<int>()))
             .Returns(new List<StaticVariableModel>());
+        mockRepo.Setup(r => r.GetStaticVariablesForMultipleTypes(It.IsAny<List<int>>()))
+            .Returns(new Dictionary<int, List<StaticVariableModel>>());
 
         var processor = new TypeGroupProcessor(mockRepo.Object);
 

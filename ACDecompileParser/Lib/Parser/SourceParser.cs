@@ -213,9 +213,9 @@ public class SourceParser
 
     public void SaveToDatabase(ITypeRepository repo)
     {
-        if (!(repo is TypeRepository typeRepoInstance))
+        if (!(repo is SqlTypeRepository typeRepoInstance))
         {
-            throw new ArgumentException("Repository must be a TypeRepository instance");
+            throw new ArgumentException("Repository must be a SqlTypeRepository instance");
         }
 
         Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction? transaction;
@@ -244,7 +244,7 @@ public class SourceParser
         }
     }
 
-    private void SaveToDatabaseInternal(ITypeRepository repo, TypeRepository typeRepoInstance)
+    private void SaveToDatabaseInternal(ITypeRepository repo, SqlTypeRepository typeRepoInstance)
     {
         _progressReporter?.Start("Saving to Database", 10);
 
@@ -670,65 +670,15 @@ public class SourceParser
         typeRepoInstance.SaveChanges(); // SAVE #6
 
         // ============================================================
-        // PHASE 10: Resolve type references and populate base type paths
+        // PHASE 10: Resolution & Offsets - REMOVED (Handled by Post-Process in Program.cs via InMemoryTypeRepository)
         // ============================================================
-        _progressReporter?.Report(9, "Phase 10/10: Resolution & Offsets");
-        ResolveTypeReferencesInMemory(repo, typeRepoInstance, typeModelsByFqn, existingTypeRefsLookup);
-        repo.PopulateBaseTypePaths(TypeModels);
-        typeRepoInstance.SaveChanges(); // SAVE #7 (final)
+        // _progressReporter?.Report(9, "Phase 10/10: Resolution & Offsets");
+        // ResolveTypeReferencesInMemory(repo, typeRepoInstance, typeModelsByFqn, existingTypeRefsLookup);
+        // repo.PopulateBaseTypePaths(TypeModels);
+        // typeRepoInstance.SaveChanges(); // SAVE #7 (final)
         _progressReporter?.Finish("Database save completed.");
     }
 
-    private void ResolveTypeReferencesInMemory(ITypeRepository repo, TypeRepository typeRepoInstance,
-        Dictionary<string, TypeModel> typeByFqn, Dictionary<string, TypeReference> typeRefLookup)
-    {
-        // PERFORMANCE: Only fetch unresolved entities
-        var unresolvedTypeRefs = repo.GetUnresolvedTypeReferences();
-        foreach (var tr in unresolvedTypeRefs)
-        {
-            // Note: tr.TypeString is not null here due to query filter
-            var baseName = ParsingUtilities.ExtractBaseTypeName(tr.TypeString);
-            if (typeByFqn.TryGetValue(baseName, out var referencedType))
-            {
-                tr.ReferencedTypeId = referencedType.Id;
-                repo.UpdateTypeReference(tr);
-            }
-        }
-
-        var unresolvedTemplateArgs = repo.GetUnresolvedTypeTemplateArguments();
-        foreach (var ta in unresolvedTemplateArgs)
-        {
-            // Note: ta.TypeString is not null here due to query filter
-            if (typeRefLookup.TryGetValue(ta.TypeString, out var existingTR))
-            {
-                ta.TypeReferenceId = existingTR.Id;
-                repo.UpdateTypeTemplateArgument(ta);
-            }
-            else
-            {
-                // This case should be rare if we did our job right in previous phases, 
-                // but if we encounter a new TypeString here, we must create it.
-                var tr = TypeReferenceUtilities.CreateTypeReference(ta.TypeString);
-                repo.InsertTypeReference(tr);
-                typeRepoInstance.SaveChanges(); // Saving immediately to get ID
-
-                ta.TypeReferenceId = tr.Id;
-                typeRefLookup[tr.TypeString] = tr; // Update lookup
-                repo.UpdateTypeTemplateArgument(ta);
-            }
-        }
-
-        var unresolvedInheritances = repo.GetUnresolvedTypeInheritances();
-        foreach (var inh in unresolvedInheritances)
-        {
-            // Note: inh.RelatedTypeString is not null here due to query filter
-            if (typeByFqn.TryGetValue(inh.RelatedTypeString, out var referencedType))
-            {
-                inh.RelatedTypeId = referencedType.Id;
-                repo.UpdateTypeInheritance(inh);
-            }
-        }
-    }
 
     public void GenerateHeaderFiles(string outputDir = "./include/", ITypeRepository? repository = null)
     {

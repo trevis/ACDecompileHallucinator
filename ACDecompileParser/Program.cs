@@ -4,6 +4,7 @@ using ACDecompileParser.Shared.Lib.Storage;
 using ACDecompileParser.Lib.Utilities;
 using ACDecompileParser.Shared.Lib.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace ACDecompileParser;
 
@@ -65,7 +66,7 @@ class Program
         optionsBuilder.UseSqlite($"Data Source={dbPath}");
 
         using var context = new TypeContext(optionsBuilder.Options);
-        using var repo = new TypeRepository(context);
+        using var repo = new SqlTypeRepository(context);
 
         Console.WriteLine($"Loading types from {dbPath}...");
         var types = repo.GetAllTypes(includeIgnored: true);
@@ -160,24 +161,44 @@ class Program
         Console.WriteLine(
             $"Parsed {parser.EnumModels.Count} enum(s), {parser.StructModels.Count} struct(s), and {parser.UnionModels.Count} union(s).");
 
+        if (File.Exists(dbPath))
+        {
+            File.Delete(dbPath);
+            Console.WriteLine($"Deleted existing database at {dbPath}");
+        }
+
         var optionsBuilder = new DbContextOptionsBuilder<TypeContext>();
         optionsBuilder.UseSqlite($"Data Source={dbPath}");
 
         using var context = new TypeContext(optionsBuilder.Options);
         context.Database.EnsureCreated();
-        using var repo = new TypeRepository(context);
+        using var repo = new SqlTypeRepository(context);
 
         parser.SaveToDatabase(repo);
         Console.WriteLine($"Saved {parser.TypeModels.Count} types to {dbPath}");
 
-        var resolutionService = new ACDecompileParser.Shared.Lib.Services.TypeResolutionService(repo, reporter);
+        // Switch to InMemoryTypeRepository for heavy resolution/offset tasks
+        var services = new ServiceCollection();
+        services.AddDbContext<TypeContext>(options => options.UseSqlite($"Data Source={dbPath}"));
+        services.AddScoped<SqlTypeRepository>();
+        var serviceProvider = services.BuildServiceProvider();
+        var scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
+
+        using var inMemoryRepo = new InMemoryTypeRepository(scopeFactory);
+        inMemoryRepo.BatchMode = true; // Use Batch Mode for heavy operations
+        inMemoryRepo.LoadFromCache(parser.TypeModels);
+
+        var resolutionService = new ACDecompileParser.Shared.Lib.Services.TypeResolutionService(inMemoryRepo, reporter);
         resolutionService.ResolveTypeReferences();
 
+        // Populate base type paths (now in memory)
+        inMemoryRepo.PopulateBaseTypePaths(parser.TypeModels);
+
         var offsetCalculationService =
-            new ACDecompileParser.Shared.Lib.Services.OffsetCalculationService(repo, reporter);
+            new ACDecompileParser.Shared.Lib.Services.OffsetCalculationService(inMemoryRepo, reporter);
         offsetCalculationService.CalculateAndApplyOffsets();
 
-        repo.SaveChanges();
+        inMemoryRepo.SaveChanges(); // Flush changes
         Console.WriteLine("Database update completed (Resolution & Offsets).");
 
         if (staticsFile != null)
@@ -251,7 +272,7 @@ class Program
         optionsBuilder.UseSqlite($"Data Source={dbPath}");
 
         using var context = new TypeContext(optionsBuilder.Options);
-        using var repo = new TypeRepository(context);
+        using var repo = new SqlTypeRepository(context);
 
         Console.WriteLine($"Loading types from {dbPath}...");
         var types = repo.GetAllTypes(includeIgnored: true);
