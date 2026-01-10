@@ -1,6 +1,8 @@
 using System.Text;
 using ACDecompileParser.Shared.Lib.Storage;
 using ACDecompileParser.Shared.Lib.Models;
+using ACDecompileParser.Shared.Lib.Output;
+using ACDecompileParser.Shared.Lib.Output.Models;
 using ACSourceHallucinator.Data.Repositories;
 using ACSourceHallucinator.Enums;
 using ACSourceHallucinator.Interfaces;
@@ -12,11 +14,19 @@ public class ReferenceTextGenerator : IReferenceTextGenerator
 {
     private readonly TypeContext _typeDb; // From shared library
     private readonly IStageResultRepository _resultRepo;
+    private readonly SqlTypeRepository _repository;
+    private readonly ClassOutputGenerator _classGenerator;
+    private readonly EnumOutputGenerator _enumGenerator;
 
     public ReferenceTextGenerator(TypeContext typeDb, IStageResultRepository resultRepo)
     {
         _typeDb = typeDb;
         _resultRepo = resultRepo;
+
+        // Wrap context in repository for generators
+        _repository = new SqlTypeRepository(typeDb);
+        _classGenerator = new ClassOutputGenerator(_repository);
+        _enumGenerator = new EnumOutputGenerator(_repository);
     }
 
     public async Task<string> GenerateReferencesForFunctionAsync(
@@ -135,89 +145,71 @@ public class ReferenceTextGenerator : IReferenceTextGenerator
     public async Task<string> GenerateStructReferenceAsync(
         int structId, ReferenceOptions options, CancellationToken ct = default)
     {
-        var structType = await _typeDb.Types
-            .Include(t => t.StructMembers)
-            .ThenInclude(m => m.TypeReference)
-            .FirstOrDefaultAsync(t => t.Id == structId, ct);
+        var structType = _repository.GetTypeById(structId);
 
         if (structType == null)
             return $"// Struct {structId} not found";
 
-        var sb = new StringBuilder();
+        var header = await GetCommentHeaderAsync(options, EntityType.Struct, structId);
 
-        // Add comment if available
-        if (options.IncludeComments && options.CommentsFromStage != null)
+        if (!string.IsNullOrEmpty(structType.Source))
         {
-            var comment = await _resultRepo.GetSuccessfulResultAsync(
-                options.CommentsFromStage, EntityType.Struct, structId);
-            if (comment != null)
-            {
-                sb.AppendLine($"// {comment.GeneratedContent}");
-            }
+            return header + structType.Source;
         }
 
-        sb.AppendLine($"struct {structType.FullyQualifiedName} {{");
-
-        if (options.IncludeMembers)
+        // Pre-load members if not already loaded by GetTypeById
+        if (structType.StructMembers == null || !structType.StructMembers.Any())
         {
-            var members = structType.StructMembers.OrderBy(m => m.Offset).ToList();
-            foreach (var member in members.Where(m => !m.IsFunctionPointer))
-            {
-                // Add member comment if available
-                if (options.IncludeComments && options.CommentsFromStage != null)
-                {
-                    var memberComment = await _resultRepo.GetSuccessfulResultAsync(
-                        options.CommentsFromStage, EntityType.StructMember, member.Id);
-                    if (memberComment != null)
-                    {
-                        sb.AppendLine($"    // {memberComment.GeneratedContent}");
-                    }
-                }
-
-                var typeStr = member.TypeReference?.TypeString ?? "unknown";
-                sb.AppendLine($"    {typeStr} {member.Name}; // offset: 0x{member.Offset:X}");
-            }
+            structType.StructMembers = _repository.GetStructMembers(structId);
         }
 
-        sb.AppendLine("}");
-
-        return sb.ToString();
+        var tokens = _classGenerator.Generate(structType);
+        return header + TokensToString(tokens);
     }
 
     public async Task<string> GenerateEnumReferenceAsync(
         int enumId, ReferenceOptions options, CancellationToken ct = default)
     {
-        var enumType = await _typeDb.Types
-            .FirstOrDefaultAsync(t => t.Id == enumId, ct);
+        var enumType = _repository.GetTypeById(enumId);
 
         if (enumType == null)
             return $"// Enum {enumId} not found";
 
-        var enumMembers = await _typeDb.EnumMembers
-            .Where(e => e.EnumTypeId == enumId)
-            .OrderBy(e => e.Value)
-            .ToListAsync(ct);
+        var header = await GetCommentHeaderAsync(options, EntityType.Enum, enumId);
 
-        var sb = new StringBuilder();
+        if (!string.IsNullOrEmpty(enumType.Source))
+        {
+            return header + enumType.Source;
+        }
 
+        var tokens = _enumGenerator.Generate(enumType);
+        return header + TokensToString(tokens);
+    }
+
+    private async Task<string> GetCommentHeaderAsync(ReferenceOptions options, EntityType entityType, int entityId)
+    {
         if (options.IncludeComments && options.CommentsFromStage != null)
         {
             var comment = await _resultRepo.GetSuccessfulResultAsync(
-                options.CommentsFromStage, EntityType.Enum, enumId);
+                options.CommentsFromStage, entityType, entityId);
+
             if (comment != null)
             {
-                sb.AppendLine($"// {comment.GeneratedContent}");
+                return $"// {comment.GeneratedContent}\n";
             }
         }
 
-        sb.AppendLine($"enum {enumType.FullyQualifiedName} {{");
+        return string.Empty;
+    }
 
-        foreach (var member in enumMembers)
+    private string TokensToString(IEnumerable<CodeToken> tokens)
+    {
+        var sb = new StringBuilder();
+
+        foreach (var token in tokens)
         {
-            sb.AppendLine($"    {member.Name} = {member.Value},");
+            sb.Append(token.Text);
         }
-
-        sb.AppendLine("}");
 
         return sb.ToString();
     }
@@ -237,15 +229,7 @@ public class ReferenceTextGenerator : IReferenceTextGenerator
         var sb = new StringBuilder();
 
         // Add comment if available
-        if (options.IncludeComments && options.CommentsFromStage != null)
-        {
-            var comment = await _resultRepo.GetSuccessfulResultAsync(
-                options.CommentsFromStage, EntityType.StructMethod, functionBodyId);
-            if (comment != null)
-            {
-                sb.AppendLine($"// {comment.GeneratedContent}");
-            }
-        }
+        sb.Append(await GetCommentHeaderAsync(options, EntityType.StructMethod, functionBodyId));
 
         sb.AppendLine(function.BodyText); // Full function source
 

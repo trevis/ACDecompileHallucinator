@@ -18,7 +18,7 @@ public class PipelineTui
     private int _currentItemIndex;
     private string _currentItemName = string.Empty;
     private readonly Queue<StageProgressEvent> _eventLog = new();
-    private const int MaxLogEntries = 12;
+    private const int MaxLogEntries = 200;
 
     public PipelineTui(IAnsiConsole console)
     {
@@ -34,8 +34,6 @@ public class PipelineTui
 
         await _console.Live(GetRenderable())
             .AutoClear(false)
-            .Overflow(VerticalOverflow.Ellipsis)
-            .Cropping(VerticalOverflowCropping.Bottom)
             .StartAsync(async ctx =>
             {
                 // Refresh loop
@@ -132,16 +130,23 @@ public class PipelineTui
         table.AddRow("Cache Hit Rate", $"{stats.CacheHitRate:P1}");
         table.AddRow("Total LLM Time", stats.TotalLlmTime.ToString(@"hh\:mm\:ss"));
         table.AddRow("Avg Response Time", $"{stats.AverageResponseTime.TotalSeconds:F1}s");
-        table.AddRow("Total Tokens", $"{stats.TotalPromptTokens + stats.TotalCompletionTokens:N0}");
+        table.AddRow("Total Prompt Tokens", $"{stats.TotalPromptTokens:N0}");
+        table.AddRow("Total Completion Tokens", $"{stats.TotalCompletionTokens:N0}");
 
         _console.Write(table);
     }
 
     private IRenderable GetRenderable()
     {
+        var totalHeight = Math.Max(24, _console.Profile.Height);
+        var totalWidth = _console.Profile.Width;
+
         // 1. Header
-        var header = new Panel($"[bold blue]Stage:[/] {_currentStageName}")
-            .Border(BoxBorder.None)
+        var header = new Panel(
+                Align.Center(
+                    new Markup($"[bold blue]ACHallucinator Pipeline[/] - [bold yellow]Stage:[/] {_currentStageName}"),
+                    VerticalAlignment.Middle))
+            .Border(BoxBorder.Rounded)
             .Expand();
 
         // 2. Stats Table
@@ -149,14 +154,20 @@ public class PipelineTui
             .Border(TableBorder.Rounded)
             .Title("Statistics")
             .AddColumn("Metric")
-            .AddColumn("Value");
+            .AddColumn("Value")
+            .Expand();
 
         statsTable.AddRow("Processed", $"{_currentItemIndex}/{_pendingItems} (Skipped: {_totalItems - _pendingItems})");
         statsTable.AddRow("Success", $"[green]{_stats.Successful}[/]");
         statsTable.AddRow("Failed", $"[red]{_stats.Failed}[/]");
         statsTable.AddRow("Retries", $"[yellow]{_stats.TotalRetries}[/]");
         statsTable.AddRow("Cache Rate", $"{_stats.CacheHitRate:P0}");
-        statsTable.AddRow("Tokens", $"{(_stats.TotalPromptTokens + _stats.TotalCompletionTokens) / 1000.0:F1}k");
+        statsTable.AddRow("Prompt Tokens", _stats.TotalPromptTokens < 10000
+            ? $"{_stats.TotalPromptTokens:N0}"
+            : $"{_stats.TotalPromptTokens / 1000.0:F1}k");
+        statsTable.AddRow("Compl. Tokens", _stats.TotalCompletionTokens < 10000
+            ? $"{_stats.TotalCompletionTokens:N0}"
+            : $"{_stats.TotalCompletionTokens / 1000.0:F1}k");
 
         // ETA Calculation
         var itemsDone = _currentItemIndex > 0 ? _currentItemIndex - 1 : 0;
@@ -164,18 +175,10 @@ public class PipelineTui
         {
             var elapsed = DateTime.UtcNow - _stageStartTime;
             var avgTimePerItem = elapsed / itemsDone;
-            // pendingItems includes the one currently being processed.
-            // So if currentItemIndex is 5 (processing 5th item), 4 are done.
-            // Items remaining = _pendingItems - 4.
-            // Wait, pendingItems is the total items to process in this stage.
-            // So remaining = _pendingItems - itemsDone.
             var itemsLeft = _pendingItems - itemsDone;
-
-            // ETA logic: avg * itemsLeft
             var eta = avgTimePerItem * itemsLeft;
 
             statsTable.AddRow("Avg Time/Item", $"{avgTimePerItem.TotalSeconds:F1}s");
-            // Highlight ETA if it's long?
             statsTable.AddRow("ETA", $"[bold magenta]{eta:hh\\:mm\\:ss}[/]");
         }
         else
@@ -185,10 +188,17 @@ public class PipelineTui
         }
 
         // 3. Event Log
-        var logGrid = new Grid().Expand();
-        logGrid.AddColumn();
-        foreach (var evt in _eventLog)
+        // Calculate main body height. Top is 3, Bottom is 5.
+        var logHeight = totalHeight - 3 - 5 - 2; // -2 for panel borders
+        if (logHeight < 5) logHeight = 5;
+
+        var logGrid = new Grid().Expand().AddColumn();
+        var entries = _eventLog.ToArray();
+        // We show the last 'logHeight' entries.
+        var startIdx = Math.Max(0, entries.Length - logHeight);
+        for (int i = startIdx; i < entries.Length; i++)
         {
+            var evt = entries[i];
             var color = evt.Type switch
             {
                 ProgressEventType.Error => "red",
@@ -199,35 +209,37 @@ public class PipelineTui
             logGrid.AddRow($"[{color}]{Markup.Escape(evt.Message)}[/]");
         }
 
+        // Fill empty space in log if needed to keep the layout stable
+        for (int i = entries.Length - startIdx; i < logHeight; i++)
+        {
+            logGrid.AddRow("");
+        }
+
         var logPanel = new Panel(logGrid)
             .Header("Event Log")
             .Border(BoxBorder.Rounded)
             .Expand();
 
-        // 4. Progress Bar (simulated)
+        // 4. Progress Bar
         var pct = _pendingItems > 0 ? (double)_currentItemIndex / _pendingItems : 0;
-        var barWidth = 40;
+        var barWidth = Math.Max(20, totalWidth - 60);
         var filled = (int)(Math.Clamp(pct, 0, 1) * barWidth);
         var bar = $"[green]{new string('█', filled)}[/][grey]{new string('░', barWidth - filled)}[/] {pct:P0}";
+
         var progressPanel = new Panel(new Rows(
             new Markup($"[bold]Processing:[/] {Markup.Escape(_currentItemName)}"),
             new Markup(bar)
-        )).Border(BoxBorder.Heavy).Expand();
+        )).Border(BoxBorder.Rounded).Expand();
 
-        // Layout
-        // Header
-        // Split: Stats | Log
-        // Footer: Progress
-
-        var contentGrid = new Grid().Expand();
-        contentGrid.AddColumn(new GridColumn().Width(36)); // Stats
-        contentGrid.AddColumn(new GridColumn()); // Log
-        contentGrid.AddRow(statsTable, logPanel);
-
-        return new Rows(
-            header,
-            contentGrid,
-            progressPanel
-        );
+        // 5. Final Layout
+        return new Layout("Root")
+            .SplitRows(
+                new Layout("Top").Update(header).Size(3),
+                new Layout("Main").SplitColumns(
+                    new Layout("Stats").Update(statsTable).Size(44),
+                    new Layout("Log").Update(logPanel)
+                ),
+                new Layout("Bottom").Update(progressPanel).Size(5)
+            );
     }
 }

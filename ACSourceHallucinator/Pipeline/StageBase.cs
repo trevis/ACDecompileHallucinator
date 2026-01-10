@@ -42,27 +42,44 @@ public abstract class StageBase : IStage
             EntityId = item.EntityId,
             FullyQualifiedName = item.FullyQualifiedName,
             Status = StageResultStatus.Pending,
+            IsCacheHit = true, // Assume cached until proven otherwise
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
 
         string? previousFailureReason = null;
+        string? previousResponse = null;
 
         for (int attempt = 0; attempt < Options.MaxRetries; attempt++)
         {
             result.RetryCount = attempt;
 
             // 1. Build and send generation prompt (async)
-            // 1. Build and send generation prompt (async)
-            var prompt = await BuildPromptAsync(item, previousFailureReason, ct);
+            var prompt = await BuildPromptAsync(item, previousFailureReason, previousResponse, ct);
             var response = await LlmClient.SendRequestAsync(
                 new LlmRequest { Prompt = prompt, Model = Options.Model }, ct);
 
+            // Accumulate stats
+            result.PromptTokens += response.PromptTokens;
+            result.CompletionTokens += response.CompletionTokens;
+            if (response.FromCache)
+            {
+                // result.IsCacheHit remains true if it was true
+            }
+            else
+            {
+                result.IsCacheHit = false;
+                result.TotalLlmTime += response.ResponseTime;
+            }
+
+            var sanitizedContent = SanitizeLlmResponse(response.Content);
+
             // 2. Verify response format
-            var formatVerification = VerifyResponseFormat(response.Content);
+            var formatVerification = VerifyResponseFormat(sanitizedContent);
             if (!formatVerification.IsValid)
             {
                 previousFailureReason = $"Format validation failed: {formatVerification.ErrorMessage}";
+                previousResponse = sanitizedContent;
                 OnProgressUpdated(
                     $"Item {item.FullyQualifiedName} failed format validation: {formatVerification.ErrorMessage}. Retrying...",
                     ProgressEventType.Warning);
@@ -72,10 +89,11 @@ public abstract class StageBase : IStage
             // 3. Optional LLM verification (if stage implements it)
             if (RequiresLlmVerification)
             {
-                var llmVerifyResult = await RunLlmVerificationAsync(item, response.Content, ct);
+                var llmVerifyResult = await RunLlmVerificationAsync(item, sanitizedContent, result, ct);
                 if (!llmVerifyResult.IsValid)
                 {
                     previousFailureReason = $"LLM verification failed: {llmVerifyResult.Reason}";
+                    previousResponse = sanitizedContent;
                     OnProgressUpdated(
                         $"Item {item.FullyQualifiedName} failed LLM verification: {llmVerifyResult.Reason}. Retrying...",
                         ProgressEventType.Warning);
@@ -85,7 +103,7 @@ public abstract class StageBase : IStage
 
             // Success!
             result.Status = StageResultStatus.Success;
-            result.GeneratedContent = response.Content;
+            result.GeneratedContent = sanitizedContent;
             result.UpdatedAt = DateTime.UtcNow;
             OnProgressUpdated($"Successfully processed {item.FullyQualifiedName}", ProgressEventType.Success);
             return result;
@@ -115,6 +133,7 @@ public abstract class StageBase : IStage
     protected abstract Task<string> BuildPromptAsync(
         WorkItem item,
         string? previousFailureReason,
+        string? previousResponse,
         CancellationToken ct);
 
     /// <summary>
@@ -165,7 +184,7 @@ public abstract class StageBase : IStage
     }
 
     private async Task<VerificationResult> RunLlmVerificationAsync(
-        WorkItem item, string generatedContent, CancellationToken ct)
+        WorkItem item, string generatedContent, StageResult result, CancellationToken ct)
     {
         string? verifyFailureReason = null;
 
@@ -176,7 +195,21 @@ public abstract class StageBase : IStage
             var verifyResponse = await LlmClient.SendRequestAsync(
                 new LlmRequest { Prompt = verifyPrompt, Model = Options.Model }, ct);
 
-            var parseResult = ParseLlmVerificationResponse(verifyResponse.Content);
+            // Accumulate stats
+            result.PromptTokens += verifyResponse.PromptTokens;
+            result.CompletionTokens += verifyResponse.CompletionTokens;
+            if (verifyResponse.FromCache)
+            {
+                // result.IsCacheHit remains true if it was true
+            }
+            else
+            {
+                result.IsCacheHit = false;
+                result.TotalLlmTime += verifyResponse.ResponseTime;
+            }
+
+            var sanitizedVerifyResponse = SanitizeLlmResponse(verifyResponse.Content);
+            var parseResult = ParseLlmVerificationResponse(sanitizedVerifyResponse);
 
             if (parseResult.IsFormatError)
             {
@@ -209,6 +242,29 @@ public abstract class StageBase : IStage
         }
 
         return prompt;
+    }
+
+    protected string SanitizeLlmResponse(string response)
+    {
+        if (string.IsNullOrWhiteSpace(response)) return response;
+
+        var lines = response.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+        var filteredLines = new List<string>();
+        bool inCodeBlock = false;
+
+        foreach (var line in lines)
+        {
+            var trimmedLine = line.Trim();
+            if (trimmedLine.StartsWith("```"))
+            {
+                inCodeBlock = !inCodeBlock;
+                continue;
+            }
+
+            filteredLines.Add(line);
+        }
+
+        return string.Join(Environment.NewLine, filteredLines).Trim();
     }
 }
 

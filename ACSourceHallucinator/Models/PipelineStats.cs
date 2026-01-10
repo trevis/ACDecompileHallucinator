@@ -22,7 +22,7 @@ public class PipelineStats
         ? TotalLlmTime / (TotalProcessed - CacheHits)
         : TimeSpan.Zero;
 
-    public void Record(StageResult result, LlmResponse? response = null)
+    public void Record(StageResult result)
     {
         TotalProcessed++;
         TotalRetries += result.RetryCount;
@@ -32,15 +32,12 @@ public class PipelineStats
         else if (result.Status == StageResultStatus.Failed)
             Failed++;
 
-        if (response != null)
-        {
-            if (response.FromCache)
-                CacheHits++;
-            else
-                TotalLlmTime += response.ResponseTime;
+        if (result.IsCacheHit)
+            CacheHits++;
+        else
+            TotalLlmTime += result.TotalLlmTime;
 
-            TotalPromptTokens += response.PromptTokens;
-            TotalCompletionTokens += response.CompletionTokens;
-        }
+        TotalPromptTokens += result.PromptTokens;
+        TotalCompletionTokens += result.CompletionTokens;
     }
 }

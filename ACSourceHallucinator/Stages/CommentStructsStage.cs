@@ -31,7 +31,7 @@ public class CommentStructsStage : StageBase
     }
 
     protected override Task<string> BuildPromptAsync(
-        WorkItem item, string? previousFailureReason, CancellationToken ct)
+        WorkItem item, string? previousFailureReason, string? previousResponse, CancellationToken ct)
     {
         return Task.FromResult("Placeholder Prompt");
     }

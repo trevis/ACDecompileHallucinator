@@ -38,7 +38,7 @@ public class CommentFunctionsStage : StageBase
 
         if (debugFilterFqn != null)
         {
-            query = query.Where(f => f.ParentType!.FullyQualifiedName == debugFilterFqn);
+            query = query.Where(f => f.ParentType!.StoredFullyQualifiedName == debugFilterFqn);
         }
 
         var functions = await query.ToListAsync(ct);
@@ -57,7 +57,7 @@ public class CommentFunctionsStage : StageBase
     }
 
     protected override async Task<string> BuildPromptAsync(
-        WorkItem item, string? previousFailureReason, CancellationToken ct)
+        WorkItem item, string? previousFailureReason, string? previousResponse, CancellationToken ct)
     {
         var function = await _typeDb.FunctionBodies
             .Include(f => f.FunctionSignature)
@@ -72,6 +72,7 @@ public class CommentFunctionsStage : StageBase
             .WithSystemMessage(SystemPrompt)
             .WithReferences(references)
             .WithRetryFeedback(previousFailureReason)
+            .WithPreviousResponse(previousResponse)
             .WithFewShotExample(
                 FewShotExamples.FunctionInput1,
                 FewShotExamples.FunctionOutput1)
@@ -106,7 +107,7 @@ public class CommentFunctionsStage : StageBase
         return new VerificationResult { IsValid = true };
     }
 
-    protected override bool RequiresLlmVerification => false;
+    protected override bool RequiresLlmVerification => true;
 
     protected override async Task<string> BuildLlmVerificationPromptAsync(
         WorkItem item, string generatedContent, CancellationToken ct)
@@ -121,7 +122,10 @@ public class CommentFunctionsStage : StageBase
             ct);
 
         return
-            $@"You are a code review assistant. Verify whether the following comment accurately describes the function.
+            $@"You are a code review assistant. Verify whether the following comment accurately describes the function AND follows the provided guidelines.
+
+=== GUIDELINES ===
+{SystemPrompt}
 
 === REFERENCES ===
 {references}
@@ -135,7 +139,7 @@ public class CommentFunctionsStage : StageBase
 Respond with a JSON object in exactly this format:
 {{
     ""valid"": true/false,
-    ""reason"": ""explanation if invalid, or 'OK' if valid""
+    ""reason"": ""explanation if invalid (mention which guideline was violated or what is inaccurate), or 'OK' if valid""
 }}
 
 Only respond with the JSON object, no other text.";
