@@ -2,7 +2,10 @@
 
 A robust system for parsing, analyzing, and browsing decompiled C++ type information.
 
-``
+```
+
+dotnet run --project ACSourceHallucinator --source-db out/types.db --max-tokens 131072 --hallucinator-db out/hallucinator.db --model gpt-oss-20b # --debug-struct Client
+```
 
 ## Project Overview
 
