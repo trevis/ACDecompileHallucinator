@@ -22,7 +22,7 @@ public static class ParsingUtilities
         defLine = defLine.Replace($"{keyword} ", string.Empty);
         defLine = defLine.Replace("__cppobj", string.Empty);
         defLine = defLine.Replace("/*VFT*/", string.Empty);
-        defLine = Regex.Replace(defLine, @"__declspec(\(align(\(\d+\)\))?)?", string.Empty);
+        defLine = Regex.Replace(defLine, @"__declspec\s*\((?:[^()]|\([^()]*\))*\)", string.Empty);
         defLine = defLine.Replace("__unaligned", string.Empty);
         // Remove volatile keyword if present
         defLine = defLine.Replace("volatile ", string.Empty);

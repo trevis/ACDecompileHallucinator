@@ -1351,48 +1351,16 @@ public class InMemoryTypeRepository : ITypeRepository
             return;
         }
 
-        Console.WriteLine("InMemoryTypeRepository: Populating BaseTypePaths in memory...");
-        // Iterate all types, find base types, build path.
-        // Similar to SQL logic but walking objects.
+        Console.WriteLine("InMemoryTypeRepository: Populating BaseTypePaths in memory using TypeResolutionService...");
 
-        int updated = 0;
-        foreach (var type in allTypes)
-        {
-            // Find base type
-            // We rely on Resolved References.
-            // Type -> BaseTypes (Inheritance) -> RelatedType (TypeModel)
-            // We need to find the primary base class (not interfaces).
-            // Assuming single inheritance for BaseTypePath or C++ primary base.
-            // Actually parsing logic puts BaseTypes in order. First one might be it.
-            // Or relatedType FQN.
+        // Use TypeResolutionService to determine paths correctly (namespace-based, not inheritance-based)
+        // We pass 'this' as the repository since we are an ITypeRepository
+        var resolutionService = new ACDecompileParser.Shared.Lib.Services.TypeResolutionService(this);
 
-            // Simplification: We want the FQN of the base type.
-            var baseTypeInh = type.BaseTypes.OrderBy(x => x.Order).FirstOrDefault();
-            if (baseTypeInh != null)
-            {
-                string? basePath = null;
-                if (baseTypeInh.RelatedTypeId.HasValue)
-                {
-                    if (_typesById.TryGetValue(baseTypeInh.RelatedTypeId.Value, out var baseType))
-                    {
-                        basePath = baseType.StoredFullyQualifiedName;
-                    }
-                }
-                else if (!string.IsNullOrEmpty(baseTypeInh.RelatedTypeString))
-                {
-                    basePath = baseTypeInh.RelatedTypeString;
-                }
+        // This will call UpdateBaseTypePath on us, which updates memory
+        resolutionService.PopulateBaseTypePaths(allTypes);
 
-                if (basePath != null && type.BaseTypePath != basePath)
-                {
-                    type.BaseTypePath = basePath;
-                    UpdateBaseTypePath(type.Id, basePath); // Updates memory & dirties
-                    updated++;
-                }
-            }
-        }
-
-        Console.WriteLine($"InMemoryTypeRepository: Populated {updated} BaseTypePaths.");
+        Console.WriteLine($"InMemoryTypeRepository: Populated BaseTypePaths for {allTypes.Count} types.");
     }
 
 

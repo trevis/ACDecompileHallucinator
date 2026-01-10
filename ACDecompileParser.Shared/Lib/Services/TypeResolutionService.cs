@@ -678,6 +678,14 @@ public class TypeResolutionService
         Dictionary<string, TypeModel> fqnLookup,
         Dictionary<(string BaseName, string Namespace), TypeModel> baseNameNamespaceLookup)
     {
+        // Debug logging for specific types
+        if (type.BaseName == "ACCmdInterp" || type.BaseName == "ACCmdInterp_vtbl" ||
+            type.BaseName == "IInputActionCallback")
+        {
+            Console.WriteLine(
+                $"[DEBUG] DetermineBaseTypePath for {type.BaseName} (NS: '{type.Namespace}', FQN: '{type.StoredFullyQualifiedName}')");
+        }
+
         // For a vtable, group with its parent struct (remove "_vtbl" suffix)
         if (type.BaseName.EndsWith("_vtbl"))
         {

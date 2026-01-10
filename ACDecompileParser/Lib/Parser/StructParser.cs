@@ -116,10 +116,11 @@ public class StructParser
         for (int i = braceStart; i < lines.Count; i++)
         {
             var line = lines[i];
-            braceCount += line.Count(c => c == '{');
-            braceCount -= line.Count(c => c == '}');
+            var cleanLine = ParsingUtilities.StripComments(line);
+            braceCount += cleanLine.Count(c => c == '{');
+            braceCount -= cleanLine.Count(c => c == '}');
 
-            if (braceCount <= 0 && line.Contains('}'))
+            if (braceCount <= 0 && cleanLine.Contains('}'))
             {
                 braceEnd = i;
                 break;

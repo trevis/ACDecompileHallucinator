@@ -57,32 +57,30 @@ public class ClassOutputGenerator : TypeOutputGeneratorBase
         }
 
         // Generate full class with nested types (and/or function bodies)
-        foreach (var token in GenerateClassWithNestedTypes(type))
+        foreach (var token in GenerateTypeDefinition(type, ""))
         {
             yield return token;
         }
     }
 
-    private IEnumerable<CodeToken> GenerateClassWithNestedTypes(TypeModel type)
+    private IEnumerable<CodeToken> GenerateTypeDefinition(TypeModel type, string indent)
     {
-        // Determine the struct keyword
-        string structKeyword = "class";
-        if (type.Source.Contains("struct"))
-        {
-            structKeyword = "struct";
-        }
-        else if (type.Source.Contains("union"))
-        {
-            structKeyword = "union";
-        }
+        string memberIndent = indent + "    ";
 
-        // Comment header
-        yield return new CodeToken("// Reconstructed from database", TokenType.Comment);
-        yield return new CodeToken(Environment.NewLine, TokenType.Whitespace);
+        // Determine the struct keyword
+        string structKeyword = GetStructKeyword(type);
+
+        // Comment header (only for top level)
+        if (string.IsNullOrEmpty(indent))
+        {
+            yield return new CodeToken("// Reconstructed from database", TokenType.Comment);
+            yield return new CodeToken(Environment.NewLine, TokenType.Whitespace);
+        }
 
         // Handle template parameters
         if (type.TemplateArguments?.Count > 0)
         {
+            yield return new CodeToken(indent, TokenType.Whitespace);
             yield return new CodeToken("template", TokenType.Keyword);
             yield return new CodeToken("<", TokenType.Punctuation);
 
@@ -111,12 +109,19 @@ public class ClassOutputGenerator : TypeOutputGeneratorBase
             ? type.BaseTypes
             : (Repository?.GetBaseTypesWithRelatedTypes(type.Id) ?? new List<TypeInheritance>());
 
+        yield return new CodeToken(indent, TokenType.Whitespace);
         yield return new CodeToken(structKeyword, TokenType.Keyword);
         yield return new CodeToken(" ", TokenType.Whitespace);
 
-        if (!string.IsNullOrEmpty(type.Namespace))
+        string displayNamespace = type.Namespace;
+        // For nested types, the namespace usually contains the parent chain.
+        // We only want to output the name, not the full namespace prefix if we are already nested.
+        // However, the original code logic used `type.Namespace + "::"` for top level.
+        // If we represent a nested type, we generally just want the BaseName.
+
+        if (string.IsNullOrEmpty(indent) && !string.IsNullOrEmpty(displayNamespace))
         {
-            yield return new CodeToken(type.Namespace + "::", TokenType.Identifier);
+            yield return new CodeToken(displayNamespace + "::", TokenType.Identifier);
         }
 
         yield return new CodeToken(type.BaseName ?? string.Empty, TokenType.TypeName, type.Id.ToString());
@@ -149,15 +154,29 @@ public class ClassOutputGenerator : TypeOutputGeneratorBase
         }
 
         yield return new CodeToken(Environment.NewLine, TokenType.Whitespace);
+        yield return new CodeToken(indent, TokenType.Whitespace);
         yield return new CodeToken("{", TokenType.Punctuation);
         yield return new CodeToken(Environment.NewLine, TokenType.Whitespace);
+
+        // C++ access specifier - assume public for structs
+        // But for classes we might want public: explicitly if we started as class
+
+        // The original code output "public:" unconditionally for the body
+        // yield return new CodeToken("public:", TokenType.Keyword); 
+        // But logic suggests we just follow standard struct rules or simple public section
+        // Let's keep it consistent with previous one if it was doing it.
+        // Previous output:
+        // {
+        // public:
+
+        yield return new CodeToken(indent, TokenType.Whitespace);
         yield return new CodeToken("public:", TokenType.Keyword);
         yield return new CodeToken(Environment.NewLine, TokenType.Whitespace);
 
-        // Forward declarations for nested types (skip enums - forward declaration of enum is nonstandard)
+        // Forward declarations for nested types (skip enums)
         foreach (var nested in (type.NestedTypes ?? new List<TypeModel>()).Where(nt => nt.Type != TypeType.Enum))
         {
-            yield return new CodeToken("    ", TokenType.Whitespace);
+            yield return new CodeToken(memberIndent, TokenType.Whitespace);
             string nestedKeyword = GetStructKeyword(nested);
             yield return new CodeToken(nestedKeyword, TokenType.Keyword);
             yield return new CodeToken(" ", TokenType.Whitespace);
@@ -172,13 +191,13 @@ public class ClassOutputGenerator : TypeOutputGeneratorBase
         // Output static members
         if (type.StaticVariables != null && type.StaticVariables.Any())
         {
-            yield return new CodeToken("    ", TokenType.Whitespace);
+            yield return new CodeToken(memberIndent, TokenType.Whitespace);
             yield return new CodeToken($"// ── Static members ──", TokenType.Comment);
             yield return new CodeToken(Environment.NewLine, TokenType.Whitespace);
 
             foreach (var staticVar in type.StaticVariables)
             {
-                yield return new CodeToken("    ", TokenType.Whitespace);
+                yield return new CodeToken(memberIndent, TokenType.Whitespace);
                 yield return new CodeToken("static ", TokenType.Keyword);
 
                 foreach (var token in TokenizeTypeString(staticVar.TypeString, staticVar.TypeReferenceId,
@@ -252,15 +271,15 @@ public class ClassOutputGenerator : TypeOutputGeneratorBase
             if (nested.Type == TypeType.Enum)
             {
                 // Output enum (using pre-loaded cache)
-                foreach (var token in GenerateNestedEnum(nested, enumMembersCache))
+                foreach (var token in GenerateNestedEnum(nested, memberIndent, enumMembersCache))
                 {
                     yield return token;
                 }
             }
             else
             {
-                // Output nested struct/class
-                foreach (var token in GenerateNestedStruct(nested))
+                // Recursive call for nested struct/class
+                foreach (var token in GenerateTypeDefinition(nested, memberIndent))
                 {
                     yield return token;
                 }
@@ -270,7 +289,7 @@ public class ClassOutputGenerator : TypeOutputGeneratorBase
         }
 
         // Separator comment before members
-        yield return new CodeToken("    ", TokenType.Whitespace);
+        yield return new CodeToken(memberIndent, TokenType.Whitespace);
         yield return new CodeToken($"// ── {type.BaseName} class members ──", TokenType.Comment);
         yield return new CodeToken(Environment.NewLine, TokenType.Whitespace);
 
@@ -281,7 +300,7 @@ public class ClassOutputGenerator : TypeOutputGeneratorBase
 
         foreach (var member in members.OrderBy(m => m.DeclarationOrder))
         {
-            foreach (var token in GenerateMemberWithOffset(member, type.Namespace))
+            foreach (var token in GenerateMemberWithOffset(member, type.Namespace, memberIndent))
             {
                 yield return token;
             }
@@ -295,13 +314,13 @@ public class ClassOutputGenerator : TypeOutputGeneratorBase
             var vtableMethodNames = GetVTableMethodOffsets(type);
 
             yield return new CodeToken(Environment.NewLine, TokenType.Whitespace);
-            yield return new CodeToken("    ", TokenType.Whitespace);
+            yield return new CodeToken(memberIndent, TokenType.Whitespace);
             yield return new CodeToken($"// ── Method signatures ──", TokenType.Comment);
             yield return new CodeToken(Environment.NewLine, TokenType.Whitespace);
 
             foreach (var body in functionBodies.OrderBy(b => b.FullyQualifiedName))
             {
-                yield return new CodeToken("    ", TokenType.Whitespace);
+                yield return new CodeToken(memberIndent, TokenType.Whitespace);
 
                 // Extract method name from fully qualified name for virtual check
                 string methodName = body.FullyQualifiedName;
@@ -338,81 +357,23 @@ public class ClassOutputGenerator : TypeOutputGeneratorBase
             }
         }
 
+        yield return new CodeToken(indent, TokenType.Whitespace);
         yield return new CodeToken("};", TokenType.Punctuation);
         yield return new CodeToken(Environment.NewLine, TokenType.Whitespace);
     }
 
-    private IEnumerable<CodeToken> GenerateNestedStruct(TypeModel nested)
-    {
-        yield return new CodeToken("    ", TokenType.Whitespace);
-        string keyword = GetStructKeyword(nested);
-        yield return new CodeToken(keyword, TokenType.Keyword);
-        yield return new CodeToken(" ", TokenType.Whitespace);
-        yield return new CodeToken(nested.BaseName, TokenType.TypeName, nested.Id.ToString());
-
-        // Handle base types for nested struct
-        var nestedBases = nested.BaseTypes?.Any() == true
-            ? nested.BaseTypes
-            : (Repository?.GetBaseTypesWithRelatedTypes(nested.Id) ?? new List<TypeInheritance>());
-
-        if (nestedBases.Any())
-        {
-            bool first = true;
-            foreach (var baseType in nestedBases)
-            {
-                string baseTypeName = baseType.RelatedType?.BaseName ?? baseType.RelatedTypeString ?? "";
-                if (!string.IsNullOrEmpty(baseTypeName))
-                {
-                    if (first)
-                    {
-                        yield return new CodeToken(" : ", TokenType.Punctuation);
-                        first = false;
-                    }
-                    else
-                    {
-                        yield return new CodeToken(", ", TokenType.Punctuation);
-                    }
-
-                    yield return new CodeToken("public ", TokenType.Keyword);
-                    foreach (var token in TokenizeTypeString(baseTypeName, baseType.RelatedTypeId, nested.Namespace))
-                    {
-                        yield return token;
-                    }
-                }
-            }
-        }
-
-        yield return new CodeToken(Environment.NewLine, TokenType.Whitespace);
-        yield return new CodeToken("    {", TokenType.Punctuation);
-        yield return new CodeToken(Environment.NewLine, TokenType.Whitespace);
-
-        // Output nested struct members
-        var members = nested.StructMembers?.Any() == true
-            ? nested.StructMembers
-            : (Repository?.GetStructMembersWithRelatedTypes(nested.Id) ?? new List<StructMemberModel>());
-
-        foreach (var member in members.OrderBy(m => m.DeclarationOrder))
-        {
-            yield return new CodeToken("    ", TokenType.Whitespace);
-            foreach (var token in GenerateMemberWithOffset(member, nested.Namespace))
-            {
-                yield return token;
-            }
-        }
-
-        yield return new CodeToken("    };", TokenType.Punctuation);
-        yield return new CodeToken(Environment.NewLine, TokenType.Whitespace);
-    }
-
-    private IEnumerable<CodeToken> GenerateNestedEnum(TypeModel nested,
+    private IEnumerable<CodeToken> GenerateNestedEnum(TypeModel nested, string indent,
         Dictionary<int, List<EnumMemberModel>>? enumMembersCache = null)
     {
-        yield return new CodeToken("    ", TokenType.Whitespace);
+        string memberIndent = indent + "    ";
+
+        yield return new CodeToken(indent, TokenType.Whitespace);
         yield return new CodeToken("enum", TokenType.Keyword);
         yield return new CodeToken(" ", TokenType.Whitespace);
         yield return new CodeToken(nested.BaseName, TokenType.TypeName, nested.Id.ToString());
         yield return new CodeToken(Environment.NewLine, TokenType.Whitespace);
-        yield return new CodeToken("    {", TokenType.Punctuation);
+        yield return new CodeToken(indent, TokenType.Whitespace);
+        yield return new CodeToken("{", TokenType.Punctuation);
         yield return new CodeToken(Environment.NewLine, TokenType.Whitespace);
 
         // Output enum members (use cache if available, otherwise fall back to query)
@@ -428,7 +389,7 @@ public class ClassOutputGenerator : TypeOutputGeneratorBase
 
         foreach (var member in enumMembers)
         {
-            yield return new CodeToken("        ", TokenType.Whitespace);
+            yield return new CodeToken(memberIndent, TokenType.Whitespace);
             yield return new CodeToken(member.Name, TokenType.Identifier);
             if (!string.IsNullOrEmpty(member.Value))
             {
@@ -440,13 +401,15 @@ public class ClassOutputGenerator : TypeOutputGeneratorBase
             yield return new CodeToken(Environment.NewLine, TokenType.Whitespace);
         }
 
-        yield return new CodeToken("    };", TokenType.Punctuation);
+        yield return new CodeToken(indent, TokenType.Whitespace);
+        yield return new CodeToken("};", TokenType.Punctuation);
         yield return new CodeToken(Environment.NewLine, TokenType.Whitespace);
     }
 
-    private IEnumerable<CodeToken> GenerateMemberWithOffset(StructMemberModel member, string? contextNamespace)
+    private IEnumerable<CodeToken> GenerateMemberWithOffset(StructMemberModel member, string? contextNamespace,
+        string indent)
     {
-        yield return new CodeToken("    ", TokenType.Whitespace);
+        yield return new CodeToken(indent, TokenType.Whitespace);
 
         foreach (var token in _memberGenerator.GenerateMemberTokens(member, contextNamespace))
         {

@@ -200,27 +200,60 @@ public class TypeHierarchyService : ITypeHierarchyService
 
     /// <summary>
     /// Links parent and child types by populating ParentType and NestedTypes properties.
-    /// Uses BaseTypePath to determine relationships.
+    /// Only nests types that should genuinely be nested in C# output:
+    /// - Vtable types (_vtbl suffix) should be nested inside their direct parent struct
+    /// - Types whose namespace IS another type should be nested
+    /// Inheritance relationships should NOT cause nesting.
     /// </summary>
     public void LinkNestedTypes(List<TypeModel> types)
     {
+        // Build lookup by FQN and BaseName for fast access
+        // Use GroupBy + First() to handle potential duplicate FQNs (e.g., duplicate template instantiations)
+        var fqnLookup = types
+            .Where(t => !string.IsNullOrEmpty(t.StoredFullyQualifiedName))
+            .GroupBy(t => t.StoredFullyQualifiedName)
+            .ToDictionary(g => g.Key, g => g.First());
+        var baseNameLookup = types.GroupBy(t => t.BaseName).ToDictionary(g => g.Key, g => g.ToList());
+
         foreach (var type in types)
         {
-            // Find the root type for grouping using existing logic
-            var rootType = FindRootTypeForGrouping(type, types);
+            TypeModel? parentType = null;
 
-            // If this type has a different root type and that root type exists, link them
-            // BUT: Avoid linking if they have the same BaseName (likely different template instantiations)
-            if (rootType != null && rootType.Id != type.Id && type.BaseName != rootType.BaseName)
+            // Case 1: Vtable types should be nested inside their direct parent struct
+            if (type.BaseName.EndsWith("_vtbl"))
             {
-                // Set parent relationship
-                type.ParentType = rootType;
+                var parentBaseName = type.BaseName.Substring(0, type.BaseName.Length - 5);
 
-                // Add this type to the parent's NestedTypes collection
-                rootType.NestedTypes ??= new List<TypeModel>();
-                if (!rootType.NestedTypes.Any(nt => nt.Id == type.Id))
+                // Look for the parent struct in the same namespace
+                if (baseNameLookup.TryGetValue(parentBaseName, out var candidates))
                 {
-                    rootType.NestedTypes.Add(type);
+                    parentType = candidates.FirstOrDefault(t => t.Namespace == type.Namespace);
+                }
+            }
+            // Case 2: Types whose namespace IS another type should be nested
+            // e.g., type with namespace "ParentType" should be nested inside ParentType
+            else if (!string.IsNullOrEmpty(type.Namespace) && fqnLookup.TryGetValue(type.Namespace, out var nsParent))
+            {
+                parentType = nsParent;
+            }
+
+            // Debug logging
+            if (type.BaseName == "ACCmdInterp" || type.BaseName == "ACCmdInterp_vtbl" ||
+                type.BaseName == "IInputActionCallback")
+            {
+                Console.WriteLine(
+                    $"[DEBUG] LinkNestedTypes: {type.BaseName} -> Parent: {parentType?.BaseName ?? "null"} (BaseTypePath: {type.BaseTypePath})");
+            }
+
+            // Link the parent-child relationship
+            if (parentType != null && parentType.Id != type.Id && type.BaseName != parentType.BaseName)
+            {
+                type.ParentType = parentType;
+
+                parentType.NestedTypes ??= new List<TypeModel>();
+                if (!parentType.NestedTypes.Any(nt => nt.Id == type.Id))
+                {
+                    parentType.NestedTypes.Add(type);
                 }
             }
         }

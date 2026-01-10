@@ -43,13 +43,44 @@ public class CSharpBindingsGenerator
     {
         var sb = new System.Text.StringBuilder();
 
-        // Track generated type names to prevent duplicates (e.g. distinct TypeModels resolving to same flattened name)
+        // Track generated type names to prevent duplicates
         var generatedNames = new HashSet<string>();
 
+        // Pre-processing: Group types by their intended generated name and pick the best candidate
+        // This handles cases where we have both a forward declaration and a full definition in the same group.
+        // We prioritize the one with members or base types.
+        var distinctTypes = new List<TypeModel>();
+        var typesByName = types
+            .Where(t => t.ParentType == null)
+            .GroupBy(t => GetGeneratedTypeName(t))
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        foreach (var kvp in typesByName)
+        {
+            var candidates = kvp.Value;
+            if (candidates.Count == 1)
+            {
+                distinctTypes.Add(candidates[0]);
+            }
+            else
+            {
+                // Pick the best candidate
+                // 1. Prefer types with members
+                // 2. Prefer types with base types
+                // 3. Prefer types with largest source size (heuristic for content)
+                // 4. Fallback to first
+                var best = candidates
+                    .OrderByDescending(t => (t.StructMembers?.Count ?? 0) + (t.FunctionBodies?.Count ?? 0))
+                    .ThenByDescending(t => t.BaseTypes?.Count ?? 0)
+                    .ThenByDescending(t => t.Source?.Length ?? 0)
+                    .First();
+                distinctTypes.Add(best);
+            }
+        }
+
         // Group types by their Namespace
-        var namespaceGroups = types
+        var namespaceGroups = distinctTypes
             .GroupBy(t => t.Namespace ?? string.Empty)
-            .Where(g => g.Any(t => t.ParentType == null))
             .OrderBy(g => g.Key)
             .ToList();
 
@@ -63,10 +94,9 @@ public class CSharpBindingsGenerator
             sb.AppendLine($"namespace {finalNs};");
             sb.AppendLine();
 
-            // Just generate all types flatly, no generic grouping needed
-            foreach (var type in group.Where(t => t.ParentType == null))
+            foreach (var type in group)
             {
-                if (ShouldSkipDuplicate(type, generatedNames)) continue;
+                // Duplicates already handled above
                 GenerateType(type, sb, 0); // File-scoped namespace, start at 0
                 sb.AppendLine();
             }
@@ -82,10 +112,8 @@ public class CSharpBindingsGenerator
                 sb.AppendLine($"namespace {finalNs}");
                 sb.AppendLine("{");
 
-                // Just generate all types flatly
-                foreach (var type in group.Where(t => t.ParentType == null))
+                foreach (var type in group)
                 {
-                    if (ShouldSkipDuplicate(type, generatedNames)) continue;
                     GenerateType(type, sb, 1);
                     sb.AppendLine();
                 }
@@ -240,7 +268,21 @@ public class CSharpBindingsGenerator
         // Nested enums are handled via NestedTypes population
 
         // Struct Members
-        var members = type.StructMembers ?? _repository?.GetStructMembersWithRelatedTypes(type.Id).ToList();
+        var members = type.StructMembers;
+
+        // If members list is empty, try loading from repository as fallback
+        // This handles cases where the type instance might be a fresh object (e.g. from nested type linking)
+        // that wasn't populated by the bulk pre-loading logic.
+        if ((members == null || !members.Any()) && _repository != null)
+        {
+            var loadedMembers = _repository.GetStructMembersWithRelatedTypes(type.Id);
+            if (loadedMembers != null && loadedMembers.Any())
+            {
+                members = loadedMembers.ToList();
+                type.StructMembers = members; // Cache for future use
+            }
+        }
+
         if (members != null && members.Any())
         {
             if (hasContent) sb.AppendLine();
@@ -565,14 +607,31 @@ public class CSharpBindingsGenerator
         // Handle vtable pointers specially
         if (PrimitiveTypeMappings.IsVTablePointer(member.Name, member.TypeString))
         {
+            // Ideally vtable pointers should also use delegates if we knew the signature, 
+            // but usually they are void** or similar in the struct definition (e.g. ICIDM_vtbl* __vftable).
+            // The actual vtable struct (ICIDM_vtbl) has the function pointers as members.
             csType = "System.IntPtr";
             comment = " // vtable pointer";
         }
         else if (member.IsFunctionPointer)
         {
-            // Function pointer member - use void* for simplicity
-            csType = "System.IntPtr";
-            comment = " // function pointer";
+            // Defensive load: If FunctionSignature is missing but ID is present, try to load it
+            if (member.FunctionSignature == null && member.FunctionSignatureId.HasValue && _repository != null)
+            {
+                member.FunctionSignature = _repository.GetFunctionSignatureById(member.FunctionSignatureId.Value);
+            }
+
+            if (member.FunctionSignature != null)
+            {
+                csType = MapFunctionSignatureToCSharp(member.FunctionSignature);
+                comment = " // function pointer";
+            }
+            else
+            {
+                // Function pointer member - use void* for simplicity
+                csType = "System.IntPtr";
+                comment = " // function pointer";
+            }
         }
         else
         {
@@ -722,6 +781,18 @@ public class CSharpBindingsGenerator
     private string MapFunctionPointerToCSharp(FunctionParamModel param)
     {
         var sig = param.NestedFunctionSignature!;
+        string baseDecl = MapFunctionSignatureToCSharp(sig);
+
+        if (param.PointerDepth > 1)
+        {
+            return baseDecl + new string('*', param.PointerDepth - 1);
+        }
+
+        return baseDecl;
+    }
+
+    private string MapFunctionSignatureToCSharp(FunctionSignatureModel sig)
+    {
         var callingConv = PrimitiveTypeMappings.MapCallingConvention(sig.CallingConvention);
 
         // Build parameter types list
@@ -740,22 +811,14 @@ public class CSharpBindingsGenerator
 
         var typeParams = string.Join(", ", paramTypes);
 
-        string baseDecl;
         if (string.IsNullOrEmpty(callingConv))
         {
-            baseDecl = $"delegate* unmanaged<{typeParams}>";
+            return $"delegate* unmanaged<{typeParams}>";
         }
         else
         {
-            baseDecl = $"delegate* unmanaged[{callingConv}]<{typeParams}>";
+            return $"delegate* unmanaged[{callingConv}]<{typeParams}>";
         }
-
-        if (param.PointerDepth > 1)
-        {
-            return baseDecl + new string('*', param.PointerDepth - 1);
-        }
-
-        return baseDecl;
     }
 
     private void GenerateStaticMethod(string methodName, string returnType, string callingConv,
