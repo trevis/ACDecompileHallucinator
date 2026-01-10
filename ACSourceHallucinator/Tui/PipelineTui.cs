@@ -19,10 +19,29 @@ public class PipelineTui
     private string _currentItemName = string.Empty;
     private readonly Queue<StageProgressEvent> _eventLog = new();
     private const int MaxLogEntries = 200;
+    private readonly object _lock = new();
+
+    // Rendering Cache
+    private int _lastWidth;
+    private int _lastHeight;
+    private int _lastEventCountSnapshot;
+    private List<(string Content, string Color)> _cachedWrappedLines = new();
 
     public PipelineTui(IAnsiConsole console)
     {
         _console = console;
+    }
+
+    private void LogInternalError(Exception ex)
+    {
+        try
+        {
+            System.IO.File.AppendAllText("tui_error.log", $"[{DateTime.Now}] {ex.ToString()}{Environment.NewLine}");
+        }
+        catch
+        {
+            // Ignore errors during error logging
+        }
     }
 
     /// <summary>
@@ -42,7 +61,15 @@ public class PipelineTui
                 {
                     while (!refreshCts.Token.IsCancellationRequested)
                     {
-                        ctx.UpdateTarget(GetRenderable());
+                        try
+                        {
+                            ctx.UpdateTarget(GetRenderable());
+                        }
+                        catch (Exception ex)
+                        {
+                            LogInternalError(ex);
+                        }
+
                         try
                         {
                             await Task.Delay(100, refreshCts.Token);
@@ -58,6 +85,11 @@ public class PipelineTui
                 {
                     await action();
                 }
+                catch (Exception ex)
+                {
+                    LogInternalError(ex);
+                    throw;
+                }
                 finally
                 {
                     refreshCts.Cancel();
@@ -69,51 +101,73 @@ public class PipelineTui
                     {
                     }
 
-                    ctx.UpdateTarget(GetRenderable());
+                    try
+                    {
+                        ctx.UpdateTarget(GetRenderable());
+                    }
+                    catch (Exception ex)
+                    {
+                        LogInternalError(ex);
+                    }
                 }
             });
     }
 
     public void SetCurrentStage(string stageName)
     {
-        _currentStageName = stageName;
-        _stageStartTime = DateTime.UtcNow;
-        // Reset stage-specific counters
-        _totalItems = 0;
-        _pendingItems = 0;
-        _currentItemIndex = 0;
-        _currentItemName = "Waiting for work items...";
+        lock (_lock)
+        {
+            _currentStageName = stageName;
+            _stageStartTime = DateTime.UtcNow;
+            _totalItems = 0;
+            _pendingItems = 0;
+            _currentItemIndex = 0;
+            _currentItemName = "Waiting for work items...";
+            _eventLog.Clear(); // Clear log when starting new stage
+            _lastEventCountSnapshot = -1; // Invalidate cache
+        }
     }
 
     public void SetTotalItems(int total, int pending)
     {
-        _totalItems = total;
-        _pendingItems = pending;
+        lock (_lock)
+        {
+            _totalItems = total;
+            _pendingItems = pending;
+        }
     }
 
     public void UpdateProgress(int current, string itemName)
     {
-        _currentItemIndex = current;
-        _currentItemName = itemName;
+        lock (_lock)
+        {
+            _currentItemIndex = current;
+            _currentItemName = itemName;
+        }
     }
 
     public void UpdateStats(PipelineStats stats)
     {
-        _stats = stats;
+        lock (_lock)
+        {
+            _stats = stats;
+        }
     }
 
     public void LogEvent(StageProgressEvent evt)
     {
-        _eventLog.Enqueue(evt);
-        if (_eventLog.Count > MaxLogEntries)
+        lock (_lock)
         {
-            _eventLog.Dequeue();
+            _eventLog.Enqueue(evt);
+            if (_eventLog.Count > MaxLogEntries)
+            {
+                _eventLog.Dequeue();
+            }
         }
     }
 
     public void DisplayFinalStats(PipelineStats stats)
     {
-        // The Live view might disappear or stay. We can print a final summary below it.
         _console.WriteLine();
         _console.MarkupLine("[bold green]Pipeline Completed![/]");
 
@@ -138,108 +192,196 @@ public class PipelineTui
 
     private IRenderable GetRenderable()
     {
-        var totalHeight = Math.Max(24, _console.Profile.Height);
-        var totalWidth = _console.Profile.Width;
-
-        // 1. Header
-        var header = new Panel(
-                Align.Center(
-                    new Markup($"[bold blue]ACHallucinator Pipeline[/] - [bold yellow]Stage:[/] {_currentStageName}"),
-                    VerticalAlignment.Middle))
-            .Border(BoxBorder.Rounded)
-            .Expand();
-
-        // 2. Stats Table
-        var statsTable = new Table()
-            .Border(TableBorder.Rounded)
-            .Title("Statistics")
-            .AddColumn("Metric")
-            .AddColumn("Value")
-            .Expand();
-
-        statsTable.AddRow("Processed", $"{_currentItemIndex}/{_pendingItems} (Skipped: {_totalItems - _pendingItems})");
-        statsTable.AddRow("Success", $"[green]{_stats.Successful}[/]");
-        statsTable.AddRow("Failed", $"[red]{_stats.Failed}[/]");
-        statsTable.AddRow("Retries", $"[yellow]{_stats.TotalRetries}[/]");
-        statsTable.AddRow("Cache Rate", $"{_stats.CacheHitRate:P0}");
-        statsTable.AddRow("Prompt Tokens", _stats.TotalPromptTokens < 10000
-            ? $"{_stats.TotalPromptTokens:N0}"
-            : $"{_stats.TotalPromptTokens / 1000.0:F1}k");
-        statsTable.AddRow("Compl. Tokens", _stats.TotalCompletionTokens < 10000
-            ? $"{_stats.TotalCompletionTokens:N0}"
-            : $"{_stats.TotalCompletionTokens / 1000.0:F1}k");
-
-        // ETA Calculation
-        var itemsDone = _currentItemIndex > 0 ? _currentItemIndex - 1 : 0;
-        if (itemsDone > 0)
+        try
         {
-            var elapsed = DateTime.UtcNow - _stageStartTime;
-            var avgTimePerItem = elapsed / itemsDone;
-            var itemsLeft = _pendingItems - itemsDone;
-            var eta = avgTimePerItem * itemsLeft;
+            // Take a snapshot of everything needed for rendering
+            PipelineStats stats;
+            string stageName;
+            DateTime stageStartTime;
+            int totalItems, pendingItems, currentItemIndex;
+            string currentItemName;
+            List<StageProgressEvent> logSnapshot;
 
-            statsTable.AddRow("Avg Time/Item", $"{avgTimePerItem.TotalSeconds:F1}s");
-            statsTable.AddRow("ETA", $"[bold magenta]{eta:hh\\:mm\\:ss}[/]");
+            lock (_lock)
+            {
+                stats = _stats;
+                stageName = _currentStageName;
+                stageStartTime = _stageStartTime;
+                totalItems = _totalItems;
+                pendingItems = _pendingItems;
+                currentItemIndex = _currentItemIndex;
+                currentItemName = _currentItemName;
+                logSnapshot = _eventLog.ToList();
+            }
+
+            var totalWidth = Math.Max(80, _console.Profile.Width);
+            var totalHeight = Math.Max(24, _console.Profile.Height);
+
+            // 1. Header
+            var header = new Panel(
+                    Align.Center(
+                        new Markup($"[bold blue]ACHallucinator Pipeline[/] - [bold yellow]Stage:[/] {Markup.Escape(stageName)}"),
+                        VerticalAlignment.Middle))
+                .Border(BoxBorder.Rounded)
+                .Expand();
+
+            // 2. Stats Table
+            var statsTable = new Table()
+                .Border(TableBorder.Rounded)
+                .Title("Statistics")
+                .AddColumn("Metric")
+                .AddColumn("Value")
+                .Expand();
+
+            statsTable.AddRow("Processed", $"{currentItemIndex}/{pendingItems} (Skipped: {totalItems - pendingItems})");
+            statsTable.AddRow("Success", $"[green]{stats.Successful}[/]");
+            statsTable.AddRow("Failed", $"[red]{stats.Failed}[/]");
+            statsTable.AddRow("Retries", $"[yellow]{stats.TotalRetries}[/]");
+            statsTable.AddRow("Cache Rate", $"{stats.CacheHitRate:P0}");
+            statsTable.AddRow("Prompt Tokens", stats.TotalPromptTokens < 10000
+                ? $"{stats.TotalPromptTokens:N0}"
+                : $"{stats.TotalPromptTokens / 1000.0:F1}k");
+            statsTable.AddRow("Compl. Tokens", stats.TotalCompletionTokens < 10000
+                ? $"{stats.TotalCompletionTokens:N0}"
+                : $"{stats.TotalCompletionTokens / 1000.0:F1}k");
+
+            var itemsDone = currentItemIndex > 0 ? currentItemIndex - 1 : 0;
+            if (itemsDone > 0)
+            {
+                var elapsed = DateTime.UtcNow - stageStartTime;
+                var avgTimePerItem = elapsed / itemsDone;
+                var itemsLeft = pendingItems - itemsDone;
+                var eta = avgTimePerItem * itemsLeft;
+
+                statsTable.AddRow("Avg Time/Item", $"{avgTimePerItem.TotalSeconds:F1}s");
+                statsTable.AddRow("ETA", $"[bold magenta]{eta:hh\\:mm\\:ss}[/]");
+            }
+            else
+            {
+                statsTable.AddRow("Avg Time/Item", "Calculating...");
+                statsTable.AddRow("ETA", "Calculating...");
+            }
+
+            // 3. Event Log
+            var logHeight = Math.Max(5, totalHeight - 3 - 5 - 2);
+            var availableLogWidth = Math.Max(10, totalWidth - 44 - 4);
+
+            if (_lastWidth != availableLogWidth || _lastEventCountSnapshot != logSnapshot.Count)
+            {
+                _cachedWrappedLines = WrapLog(logSnapshot, availableLogWidth);
+                _lastWidth = availableLogWidth;
+                _lastHeight = logHeight;
+                _lastEventCountSnapshot = logSnapshot.Count;
+            }
+
+            var logGrid = new Grid().Expand().AddColumn();
+            var linesToShow = _cachedWrappedLines.Skip(Math.Max(0, _cachedWrappedLines.Count - logHeight)).Take(logHeight).ToList();
+
+            foreach (var line in linesToShow)
+            {
+                logGrid.AddRow($"[{line.Color}]{line.Content}[/]");
+            }
+
+            for (int i = linesToShow.Count; i < logHeight; i++)
+            {
+                logGrid.AddRow("");
+            }
+
+            var logPanel = new Panel(logGrid)
+                .Header("Event Log")
+                .Border(BoxBorder.Rounded)
+                .Expand();
+
+            // 4. Progress Bar
+            var pct = pendingItems > 0 ? (double)currentItemIndex / pendingItems : 0;
+            var barWidth = Math.Max(20, totalWidth - 60);
+            var filled = (int)(Math.Clamp(pct, 0, 1) * barWidth);
+            var bar = $"[green]{new string('█', filled)}[/][grey]{new string('░', barWidth - filled)}[/] {pct:P0}";
+
+            var progressPanel = new Panel(new Rows(
+                new Markup($"[bold]Processing:[/] {Markup.Escape(currentItemName)}"),
+                new Markup(bar)
+            )).Border(BoxBorder.Rounded).Expand();
+
+            // 5. Final Layout
+            return new Layout("Root")
+                .SplitRows(
+                    new Layout("Top").Update(header).Size(3),
+                    new Layout("Main").SplitColumns(
+                        new Layout("Stats").Update(statsTable).Size(44),
+                        new Layout("Log").Update(logPanel)
+                    ),
+                    new Layout("Bottom").Update(progressPanel).Size(5)
+                );
         }
-        else
+        catch (Exception ex)
         {
-            statsTable.AddRow("Avg Time/Item", "Calculating...");
-            statsTable.AddRow("ETA", "Calculating...");
+            LogInternalError(ex);
+            return new Markup($"[red]UI Error: {Markup.Escape(ex.Message)}[/]");
         }
+    }
 
-        // 3. Event Log
-        // Calculate main body height. Top is 3, Bottom is 5.
-        var logHeight = totalHeight - 3 - 5 - 2; // -2 for panel borders
-        if (logHeight < 5) logHeight = 5;
-
-        var logGrid = new Grid().Expand().AddColumn();
-        var entries = _eventLog.ToArray();
-        // We show the last 'logHeight' entries.
-        var startIdx = Math.Max(0, entries.Length - logHeight);
-        for (int i = startIdx; i < entries.Length; i++)
+    private List<(string Content, string Color)> WrapLog(List<StageProgressEvent> events, int width)
+    {
+        var allLines = new List<(string Content, string Color)>();
+        foreach (var evt in events)
         {
-            var evt = entries[i];
             var color = evt.Type switch
             {
                 ProgressEventType.Error => "red",
                 ProgressEventType.Warning => "yellow",
                 ProgressEventType.Success => "green",
+                ProgressEventType.GeneratedContent => "lightblue",
                 _ => "grey"
             };
-            logGrid.AddRow($"[{color}]{Markup.Escape(evt.Message)}[/]");
+
+            var lines = evt.Message.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+            foreach (var rawLine in lines)
+            {
+                var escapedLine = Markup.Escape(rawLine);
+                if (string.IsNullOrEmpty(escapedLine))
+                {
+                    allLines.Add(("", color));
+                    continue;
+                }
+
+                var words = escapedLine.Split(' ');
+                var currentLine = new System.Text.StringBuilder();
+
+                foreach (var word in words)
+                {
+                    if (currentLine.Length + word.Length + 1 > width)
+                    {
+                        if (currentLine.Length > 0)
+                        {
+                            allLines.Add((currentLine.ToString(), color));
+                            currentLine.Clear();
+                        }
+
+                        var remainingWord = word;
+                        while (remainingWord.Length > width)
+                        {
+                            if (width <= 0) break;
+                            allLines.Add((remainingWord.Substring(0, width), color));
+                            remainingWord = remainingWord.Substring(width);
+                        }
+
+                        currentLine.Append(remainingWord);
+                    }
+                    else
+                    {
+                        if (currentLine.Length > 0) currentLine.Append(' ');
+                        currentLine.Append(word);
+                    }
+                }
+
+                if (currentLine.Length > 0)
+                {
+                    allLines.Add((currentLine.ToString(), color));
+                }
+            }
         }
 
-        // Fill empty space in log if needed to keep the layout stable
-        for (int i = entries.Length - startIdx; i < logHeight; i++)
-        {
-            logGrid.AddRow("");
-        }
-
-        var logPanel = new Panel(logGrid)
-            .Header("Event Log")
-            .Border(BoxBorder.Rounded)
-            .Expand();
-
-        // 4. Progress Bar
-        var pct = _pendingItems > 0 ? (double)_currentItemIndex / _pendingItems : 0;
-        var barWidth = Math.Max(20, totalWidth - 60);
-        var filled = (int)(Math.Clamp(pct, 0, 1) * barWidth);
-        var bar = $"[green]{new string('█', filled)}[/][grey]{new string('░', barWidth - filled)}[/] {pct:P0}";
-
-        var progressPanel = new Panel(new Rows(
-            new Markup($"[bold]Processing:[/] {Markup.Escape(_currentItemName)}"),
-            new Markup(bar)
-        )).Border(BoxBorder.Rounded).Expand();
-
-        // 5. Final Layout
-        return new Layout("Root")
-            .SplitRows(
-                new Layout("Top").Update(header).Size(3),
-                new Layout("Main").SplitColumns(
-                    new Layout("Stats").Update(statsTable).Size(44),
-                    new Layout("Log").Update(logPanel)
-                ),
-                new Layout("Bottom").Update(progressPanel).Size(5)
-            );
+        return allLines;
     }
 }
