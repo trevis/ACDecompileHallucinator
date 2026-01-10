@@ -27,16 +27,54 @@ public class CSharpGroupProcessor
     /// <summary>
     /// Generates C# binding code for a group of types as a string.
     /// </summary>
-    public string GenerateGroupContent(List<TypeModel> types, bool includeNamespace = true)
+    public string GenerateGroupContent(List<TypeModel> types, bool includeNamespace = true, bool preloadData = true)
     {
         if (types == null || !types.Any())
             return string.Empty;
 
-        // Data is now pre-loaded in CSharpFileOutputGenerator, no need to query here!
-        // The TypeModels already have BaseTypes, StructMembers, FunctionBodies, and StaticVariables attached
-
         // Link parent/child relationships for nested type output
         _hierarchyService.LinkNestedTypes(types);
+
+        // Pre-load all data in batch if requested and we have a repository
+        if (preloadData && _repository != null)
+        {
+            var allTypes = new List<TypeModel>(types);
+            foreach (var type in types)
+            {
+                CollectNestedTypes(type, allTypes);
+            }
+            
+            var allTypeIds = allTypes.Select(t => t.Id).Distinct().ToList();
+            
+            var allBaseTypes = _repository.GetBaseTypesForMultipleTypes(allTypeIds);
+            var allMembers = _repository.GetStructMembersForMultipleTypes(allTypeIds);
+            var allBodies = _repository.GetFunctionBodiesForMultipleTypes(allTypeIds);
+            var allStaticVariables = _repository.GetStaticVariablesForMultipleTypes(allTypeIds);
+
+            // Attach to ALL types so generators find pre-loaded data
+            foreach (var type in allTypes)
+            {
+                if (allBaseTypes.TryGetValue(type.Id, out var baseTypes))
+                    type.BaseTypes = baseTypes;
+                else if (type.BaseTypes == null || !type.BaseTypes.Any())
+                    type.BaseTypes = new List<TypeInheritance>();
+
+                if (allMembers.TryGetValue(type.Id, out var members))
+                    type.StructMembers = members;
+                else if (type.StructMembers == null || !type.StructMembers.Any())
+                    type.StructMembers = new List<StructMemberModel>();
+
+                if (allBodies.TryGetValue(type.Id, out var bodies))
+                    type.FunctionBodies = bodies;
+                else if (type.FunctionBodies == null || !type.FunctionBodies.Any())
+                    type.FunctionBodies = new List<FunctionBodyModel>();
+
+                if (allStaticVariables.TryGetValue(type.Id, out var staticVars))
+                    type.StaticVariables = staticVars;
+                else if (type.StaticVariables == null || !type.StaticVariables.Any())
+                    type.StaticVariables = new List<StaticVariableModel>();
+            }
+        }
 
         if (includeNamespace)
         {
@@ -51,6 +89,23 @@ public class CSharpGroupProcessor
             }
 
             return sb.ToString();
+        }
+    }
+
+    /// <summary>
+    /// Recursively collects all nested types from a type hierarchy for batch loading.
+    /// </summary>
+    private void CollectNestedTypes(TypeModel type, List<TypeModel> allTypes)
+    {
+        if (type.NestedTypes == null) return;
+
+        foreach (var nested in type.NestedTypes)
+        {
+            if (!allTypes.Contains(nested))
+            {
+                allTypes.Add(nested);
+                CollectNestedTypes(nested, allTypes);
+            }
         }
     }
 

@@ -180,7 +180,7 @@ public class CSharpFileOutputGenerator
             // Generate C# content using CSharpGroupProcessor
             sw.Restart();
             var groupProcessor = new CSharpGroupProcessor(_repository, lookupCache);
-            string csContent = groupProcessor.GenerateGroupContent(types, includeNamespace: true);
+            string csContent = groupProcessor.GenerateGroupContent(types, includeNamespace: true, preloadData: false);
             totalGenerateMs += sw.ElapsedMilliseconds;
 
             // Write to file
