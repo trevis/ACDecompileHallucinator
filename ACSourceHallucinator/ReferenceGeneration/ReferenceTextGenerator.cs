@@ -3,6 +3,7 @@ using ACDecompileParser.Shared.Lib.Storage;
 using ACDecompileParser.Shared.Lib.Models;
 using ACDecompileParser.Shared.Lib.Output;
 using ACDecompileParser.Shared.Lib.Output.Models;
+using ACDecompileParser.Shared.Lib.Services;
 using ACSourceHallucinator.Data.Repositories;
 using ACSourceHallucinator.Enums;
 using ACSourceHallucinator.Interfaces;
@@ -17,6 +18,8 @@ public class ReferenceTextGenerator : IReferenceTextGenerator
     private readonly SqlTypeRepository _repository;
     private readonly ClassOutputGenerator _classGenerator;
     private readonly EnumOutputGenerator _enumGenerator;
+    private readonly MemberTokenGenerator _memberTokenGenerator;
+    private readonly TypeTokenizationService _tokenizationService;
 
     public ReferenceTextGenerator(TypeContext typeDb, IStageResultRepository resultRepo)
     {
@@ -25,8 +28,10 @@ public class ReferenceTextGenerator : IReferenceTextGenerator
 
         // Wrap context in repository for generators
         _repository = new SqlTypeRepository(typeDb);
-        _classGenerator = new ClassOutputGenerator(_repository);
+        _tokenizationService = new TypeTokenizationService(_repository);
+        _classGenerator = new ClassOutputGenerator(_repository, _tokenizationService);
         _enumGenerator = new EnumOutputGenerator(_repository);
+        _memberTokenGenerator = new MemberTokenGenerator(_tokenizationService);
     }
 
     public async Task<string> GenerateReferencesForFunctionAsync(
@@ -74,10 +79,14 @@ public class ReferenceTextGenerator : IReferenceTextGenerator
             await CollectBaseTypesRecursivelyAsync(referencedTypeIds, ct);
         }
 
+        // Create sub-options that disable base type recursion for individual items
+        // This prevents "=== BASE TYPES ===" headers from appearing inside other sections
+        var subOptions = options with { IncludeBaseTypes = false };
+
         // Generate sections
         if (function.ParentId.HasValue)
         {
-            var parentRef = await GenerateStructReferenceAsync(function.ParentId.Value, options, ct);
+            var parentRef = await GenerateStructReferenceAsync(function.ParentId.Value, subOptions, ct);
             sections.Add($"=== PARENT STRUCT ===\n{parentRef}");
         }
 
@@ -93,7 +102,7 @@ public class ReferenceTextGenerator : IReferenceTextGenerator
             var paramRefs = new List<string>();
             foreach (var typeId in paramTypeIds)
             {
-                paramRefs.Add(await GenerateTypeReferenceAsync(typeId, options, ct));
+                paramRefs.Add(await GenerateTypeReferenceAsync(typeId, subOptions, ct));
             }
 
             sections.Add($"=== PARAMETER TYPES ===\n{string.Join("\n\n", paramRefs)}");
@@ -102,11 +111,12 @@ public class ReferenceTextGenerator : IReferenceTextGenerator
         var returnTypeId = function.FunctionSignature?.ReturnTypeReference?.ReferencedTypeId;
         if (returnTypeId.HasValue && returnTypeId != function.ParentId && !paramTypeIds.Contains(returnTypeId.Value))
         {
-            var returnRef = await GenerateTypeReferenceAsync(returnTypeId.Value, options, ct);
+            var returnRef = await GenerateTypeReferenceAsync(returnTypeId.Value, subOptions, ct);
             sections.Add($"=== RETURN TYPE ===\n{returnRef}");
         }
 
         // Base types (excluding already-shown types)
+        // These are the "global" context base types collected recursively
         var baseTypeIds = referencedTypeIds
             .Except(paramTypeIds)
             .Where(id => id != function.ParentId && id != returnTypeId)
@@ -117,7 +127,7 @@ public class ReferenceTextGenerator : IReferenceTextGenerator
             var baseRefs = new List<string>();
             foreach (var typeId in baseTypeIds)
             {
-                baseRefs.Add(await GenerateTypeReferenceAsync(typeId, options, ct));
+                baseRefs.Add(await GenerateTypeReferenceAsync(typeId, subOptions, ct));
             }
 
             sections.Add($"=== BASE TYPES ===\n{string.Join("\n\n", baseRefs)}");
@@ -150,21 +160,105 @@ public class ReferenceTextGenerator : IReferenceTextGenerator
         if (structType == null)
             return $"// Struct {structId} not found";
 
+        var sb = new StringBuilder();
+
+        if (options.IncludeBaseTypes)
+        {
+            var baseTypeIds = new HashSet<int> { structId };
+            await CollectBaseTypesRecursivelyAsync(baseTypeIds, ct);
+            baseTypeIds.Remove(structId);
+
+            if (baseTypeIds.Any())
+            {
+                sb.AppendLine("=== BASE TYPES ===");
+                var baseOptions = new ReferenceOptions
+                {
+                    IncludeComments = options.IncludeComments,
+                    IncludeBaseTypes = false,
+                    CommentsFromStage = options.CommentsFromStage
+                };
+
+                // Sort by ID to ensure deterministic order
+                foreach (var baseTypeId in baseTypeIds.OrderBy(id => id))
+                {
+                    var baseRef = await GenerateTypeReferenceAsync(baseTypeId, baseOptions, ct);
+                    sb.AppendLine(baseRef);
+                    sb.AppendLine();
+                }
+            }
+        }
+
+        if (options.IncludeBaseTypes)
+        {
+            sb.AppendLine("=== TARGET STRUCT ===");
+        }
+
         var header = await GetCommentHeaderAsync(options, EntityType.Struct, structId);
 
         if (!string.IsNullOrEmpty(structType.Source))
         {
-            return header + structType.Source;
+            sb.Append(header + structType.Source);
         }
-
-        // Pre-load members if not already loaded by GetTypeById
-        if (structType.StructMembers == null || !structType.StructMembers.Any())
+        else
         {
-            structType.StructMembers = _repository.GetStructMembers(structId);
+            // Pre-load members if not already loaded by GetTypeById
+            if (structType.StructMembers == null || !structType.StructMembers.Any())
+            {
+                structType.StructMembers = _repository.GetStructMembers(structId);
+            }
+
+            var tokens = _classGenerator.Generate(structType);
+            sb.Append(header + TokensToString(tokens));
         }
 
-        var tokens = _classGenerator.Generate(structType);
-        return header + TokensToString(tokens);
+        if (options.IncludeMemberFunctions)
+        {
+            // Generate member functions context
+            var methods = await _typeDb.FunctionBodies
+                .Include(f => f.FunctionSignature)
+                .ThenInclude(s => s.Parameters)
+                .Where(f => f.ParentId == structId)
+                .ToListAsync(ct);
+
+            if (methods.Any())
+            {
+                sb.AppendLine();
+                sb.AppendLine();
+                sb.AppendLine("=== MEMBER FUNCTIONS CONTEXT ===");
+                sb.AppendLine();
+
+                foreach (var method in methods.OrderBy(m => m.FunctionSignature?.Name ?? m.FullyQualifiedName))
+                {
+                    // Try to get comment from CommentFunctions stage
+                    var commentResult = await _resultRepo.GetSuccessfulResultAsync(
+                        "CommentFunctions", EntityType.StructMethod, method.Id);
+
+                    if (commentResult != null && !string.IsNullOrWhiteSpace(commentResult.GeneratedContent))
+                    {
+                        var lines = commentResult.GeneratedContent.Split(
+                            new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+                        foreach (var line in lines)
+                        {
+                            if (!string.IsNullOrWhiteSpace(line))
+                            {
+                                sb.AppendLine($"// {line}");
+                            }
+                        }
+                    }
+
+                    var sigTokens = _memberTokenGenerator.GenerateSignatureTokens(
+                        method.FunctionSignature,
+                        method.FullyQualifiedName,
+                        structType.Namespace);
+
+                    sb.Append(TokensToString(sigTokens));
+                    sb.AppendLine(";");
+                    sb.AppendLine();
+                }
+            }
+        }
+
+        return sb.ToString();
     }
 
     public async Task<string> GenerateEnumReferenceAsync(

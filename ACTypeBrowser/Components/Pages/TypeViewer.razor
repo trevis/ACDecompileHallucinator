@@ -22,12 +22,13 @@
 }
 else
 {
-    <TypeDetail TypeGroup="_typeGroup" Title="@_baseName" ActiveTab="@Tab"/>
+    <TypeDetail TypeGroup="_typeGroup" Title="@_baseName" ActiveTab="@Tab" PipelineItem="@PipelineItem"/>
 }
 
 @code {
     [Parameter] public string? Path { get; set; }
     [SupplyParameterFromQuery] public string? Tab { get; set; }
+    [SupplyParameterFromQuery] public string? PipelineItem { get; set; }
 
     private List<TypeModel>? _typeGroup;
     private string? _baseName;

@@ -71,6 +71,7 @@ public class CommentFunctionsStage : StageBase
 
         var builder = new PromptBuilder()
             .WithSystemMessage(SystemPrompt)
+            .WithTargetContext($"Generating comments for function:\n{function.FullyQualifiedName}")
             .WithReferences(references)
             .WithRetryFeedback(previousFailureReason)
             .WithPreviousResponse(previousResponse)

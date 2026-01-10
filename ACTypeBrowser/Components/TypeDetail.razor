@@ -70,7 +70,7 @@
         else if (_activeTab == "pipeline")
         {
             <div class="flex-grow-1" style="min-height: 0; overflow: hidden;">
-                <PipelineFlow Type="TypeGroup.First()"/>
+                <PipelineFlow Type="TypeGroup.First()" PipelineItem="@PipelineItem"/>
             </div>
         }
         else
@@ -247,6 +247,7 @@
     [Parameter] public List<TypeModel>? TypeGroup { get; set; }
     [Parameter] public string? Title { get; set; }
     [Parameter] public string? ActiveTab { get; set; }
+    [Parameter] public string? PipelineItem { get; set; }
 
     private string _activeTab = "definition";
 

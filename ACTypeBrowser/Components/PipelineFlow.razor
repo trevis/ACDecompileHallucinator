@@ -5,6 +5,7 @@
 @using ACSourceHallucinator.Data.Entities
 @using ACTypeBrowser.Components.Common
 @inject IStageResultRepository ResultRepository
+@inject NavigationManager NavigationManager
 
 <div class="pipeline-container">
     <!-- Main Content -->
@@ -61,10 +62,10 @@
                                                     <span>@GetRequestType(log) (Attempt @(log.Attempt + 1))</span>
                                                     <div class="d-flex gap-2">
                                                         <span class="badge bg-secondary" title="Tokens">@log.PromptTokens / @log.CompletionTokens tok</span>
+                                                        <span class="badge bg-secondary">@((log.DurationMs / 1000.0).ToString("0.##"))s</span>
                                                         <span class="badge @(log.IsSuccess ? "bg-success" : "bg-danger")">
                                                             @(log.IsSuccess ? "Success" : "Failed")
                                                         </span>
-                                                        <span class="badge bg-secondary">@((log.DurationMs / 1000.0).ToString("0.##"))s</span>
                                                     </div>
                                                 </div>
                                             </button>
@@ -107,13 +108,14 @@
     <RightSidebar Title="Pipeline Flow">
         <h5 class="p-3 mb-0 border-bottom">Pipeline Flow</h5>
         <div class="list-group list-group-flush">
-            <button class="list-group-item list-group-item-action @(_selectedEntity == Type ? "active" : "")"
-                    @onclick="() => SelectEntity(Type)">
+            <a href="@NavigationManager.GetUriWithQueryParameter("pipelineItem", "Main")"
+               class="list-group-item list-group-item-action @(_selectedEntity == Type ? "active" : "")"
+               @onclick="() => SelectEntity(Type)" @onclick:preventDefault>
                 <div class="d-flex w-100 justify-content-between">
                     <h6 class="mb-1 text-truncate" title="@Type.NameWithTemplates">@Type.NameWithTemplates</h6>
                 </div>
                 <small>Main Struct</small>
-            </button>
+            </a>
 
             @if (Type.FunctionBodies.Any())
             {
@@ -122,12 +124,13 @@
                 </div>
                 @foreach (var func in Type.FunctionBodies.OrderBy(f => f.Name))
                 {
-                    <button class="list-group-item list-group-item-action @(_selectedEntity == func ? "active" : "")"
-                            @onclick="() => SelectEntity(func)">
+                    <a href="@NavigationManager.GetUriWithQueryParameter("pipelineItem", func.Name)"
+                       class="list-group-item list-group-item-action @(_selectedEntity == func ? "active" : "")"
+                       @onclick="() => SelectEntity(func)" @onclick:preventDefault>
                         <div class="d-flex w-100 justify-content-between" style="min-width: 0;">
                             <h6 class="mb-1 text-truncate" title="@func.Name">@func.Name</h6>
                         </div>
-                    </button>
+                    </a>
                 }
             }
         </div>
@@ -232,6 +235,7 @@
 
 @code {
     [Parameter] public TypeModel Type { get; set; } = null!;
+    [Parameter] public string? PipelineItem { get; set; }
 
     private object _selectedEntity = null!;
     private List<StageResult>? _selectedResults;
@@ -241,13 +245,38 @@
 
     protected override async Task OnParametersSetAsync()
     {
-        if (Type != null && _selectedEntity == null)
+        if (Type != null)
         {
-            await SelectEntity(Type);
+            if (!string.IsNullOrEmpty(PipelineItem))
+            {
+                // Try to match function by name
+                var targetFunc = Type.FunctionBodies.FirstOrDefault(f => f.Name == PipelineItem);
+                if (targetFunc != null)
+                {
+                    if (_selectedEntity != targetFunc)
+                    {
+                        await SelectEntity(targetFunc, updateUrl: false);
+                    }
+                }
+                else
+                {
+                    // If pipeline item specified but not found (or is "Main"), default to Type
+                    // Assuming "Main" is the identifier for the type itself
+                    if (PipelineItem == "Main" && _selectedEntity != Type)
+                    {
+                        await SelectEntity(Type, updateUrl: false);
+                    }
+                }
+            }
+            else if (_selectedEntity == null)
+            {
+                // Default to Type if nothing selected and no param
+                await SelectEntity(Type, updateUrl: false);
+            }
         }
     }
 
-    private async Task SelectEntity(object entity)
+    private async Task SelectEntity(object entity, bool updateUrl = true)
     {
         _selectedEntity = entity;
         _selectedResults = null;
@@ -279,6 +308,26 @@
         finally
         {
             _isLoading = false;
+        }
+
+        if (updateUrl)
+        {
+            string? pipelineItem = null;
+            if (entity is FunctionBodyModel func)
+            {
+                pipelineItem = func.Name;
+            }
+            else if (entity is TypeModel)
+            {
+                // Represent main type as "Main" or empty? 
+                // Let's use "Main" to be explicit if needed, or remove param if it's the default.
+                // However, matching the logic above, let's allow "Main" or just remove it to keep it clean.
+                // Let's remove it to keep URL clean for default view.
+                pipelineItem = "Main";
+            }
+
+            var uri = NavigationManager.GetUriWithQueryParameter("pipelineItem", pipelineItem);
+            NavigationManager.NavigateTo(uri, replace: true);
         }
     }
 

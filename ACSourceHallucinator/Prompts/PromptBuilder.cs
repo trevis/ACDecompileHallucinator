@@ -10,6 +10,7 @@ public class PromptBuilder
     private string? _previousResponse;
     private readonly List<(string Input, string Output)> _fewShotExamples = new();
     private string? _input;
+    private string? _targetContext;
 
     public PromptBuilder WithSystemMessage(string message)
     {
@@ -20,6 +21,12 @@ public class PromptBuilder
     public PromptBuilder WithReferences(string references)
     {
         _referencesSection = references;
+        return this;
+    }
+
+    public PromptBuilder WithTargetContext(string targetContext)
+    {
+        _targetContext = targetContext;
         return this;
     }
 
@@ -54,6 +61,13 @@ public class PromptBuilder
         if (_systemMessage != null)
         {
             sb.AppendLine(_systemMessage);
+            sb.AppendLine();
+        }
+
+        if (_targetContext != null)
+        {
+            sb.AppendLine("=== TARGET CONTEXT ===");
+            sb.AppendLine(_targetContext);
             sb.AppendLine();
         }
 

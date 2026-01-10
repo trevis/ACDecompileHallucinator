@@ -56,11 +56,17 @@ public class CommentStructsStage : StageBase
     {
         var references = await ReferenceGenerator.GenerateStructReferenceAsync(
             item.EntityId,
-            new ReferenceOptions { IncludeComments = false, IncludeBaseTypes = true },
+            new ReferenceOptions
+            {
+                IncludeComments = false,
+                IncludeBaseTypes = true,
+                IncludeMemberFunctions = true
+            },
             ct);
 
         var builder = new PromptBuilder()
             .WithSystemMessage(SystemPrompt)
+            .WithTargetContext($"Generating comments for struct:\n{item.FullyQualifiedName}")
             .WithReferences(references)
             .WithRetryFeedback(previousFailureReason)
             .WithPreviousResponse(previousResponse)
@@ -116,7 +122,12 @@ public class CommentStructsStage : StageBase
     {
         var references = await ReferenceGenerator.GenerateStructReferenceAsync(
             item.EntityId,
-            new ReferenceOptions { IncludeComments = false, IncludeBaseTypes = true },
+            new ReferenceOptions
+            {
+                IncludeComments = false,
+                IncludeBaseTypes = true,
+                IncludeMemberFunctions = true
+            },
             ct);
 
         return
