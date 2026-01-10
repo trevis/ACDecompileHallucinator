@@ -3,7 +3,16 @@
 A robust system for parsing, analyzing, and browsing decompiled C++ type information.
 
 ```
+# Build types database
+dotnet run --project ACDecompileParser -- acclient.c acclient.h --statics-file statics.txt
 
+# generate csharp bindings
+dotnet run --project ACDecompileParser csbindings
+
+# generate c headers
+dotnet run --project ACDecompileParser headers
+
+# Build hallucinator database (generated comments)
 dotnet run --project ACSourceHallucinator --source-db out/types.db --max-tokens 131072 --hallucinator-db out/hallucinator.db --model gpt-oss-20b # --debug-struct Client
 ```
 
