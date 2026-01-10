@@ -715,19 +715,45 @@ public class CSharpBindingsGenerator
         int indentLevel)
     {
         string indent = new string(' ', indentLevel * 4);
-        AppendXmlDocComment(sb, fb.XmlDocComment, indent);
+
+        var sig = fb.FunctionSignature;
+        if (sig == null)
+        {
+            AppendXmlDocComment(sb, fb.XmlDocComment, indent);
+            sb.AppendLine($"{indent}// Unable to generate: {fb.FullyQualifiedName} (no signature)");
+            return;
+        }
+
+        // Prepare the summary injection
+        string offsetStr = fb.Offset.HasValue ? $"{fb.Offset.Value:X8}" : "00000000";
+        string signature = sig.FullyQualifiedName ?? fb.FullyQualifiedName;
+        string escapedSignature = signature.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
+
+        string injection = $"<para>Offset: 0x{offsetStr}<br /><code>{escapedSignature}</code></para>";
+
+        string finalComment = fb.XmlDocComment;
+        if (string.IsNullOrWhiteSpace(finalComment))
+        {
+            finalComment = $"<summary>\n{injection}\n</summary>";
+        }
+        else
+        {
+            if (finalComment.Contains("</summary>"))
+            {
+                finalComment = finalComment.Replace("</summary>", $"\n{injection}\n</summary>");
+            }
+            else
+            {
+                finalComment = $"<summary>\n{finalComment}\n\n{injection}\n</summary>";
+            }
+        }
+
+        AppendXmlDocComment(sb, finalComment, indent);
 
         // Comment out methods that belong to template types
         if (sourceType.IsGeneric)
         {
             sb.AppendLine($"{indent}// {fb.FullyQualifiedName} (template type method)");
-            return;
-        }
-
-        var sig = fb.FunctionSignature;
-        if (sig == null)
-        {
-            sb.AppendLine($"{indent}// Unable to generate: {fb.FullyQualifiedName} (no signature)");
             return;
         }
 
@@ -750,12 +776,6 @@ public class CSharpBindingsGenerator
 
         // Get parameters
         var parameters = sig.Parameters?.OrderBy(p => p.Position).ToList() ?? new List<FunctionParamModel>();
-
-        // Add original signature as a comment
-        if (!string.IsNullOrEmpty(sig.FullyQualifiedName))
-        {
-            sb.AppendLine($"{indent}// {sig.FullyQualifiedName}");
-        }
 
         // Determine if this is a static or instance method
         bool isStatic = !callingConv.Equals("Thiscall", StringComparison.OrdinalIgnoreCase);
@@ -1035,6 +1055,7 @@ public class CSharpBindingsGenerator
         if (string.IsNullOrWhiteSpace(comment))
             return;
 
+        sb.AppendLine();
         var lines = comment.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
         foreach (var line in lines)
         {
