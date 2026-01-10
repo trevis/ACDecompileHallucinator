@@ -32,9 +32,16 @@ public class FunctionBodyModel : BaseMemberModel
     /// Foreign key to the parent TypeModel. Null for global functions.
     /// </summary>
     public int? ParentId { get; set; }
+
     /// <summary>
     /// The memory address/offset of the function from the source file header.
     /// </summary>
     public long? Offset { get; set; }
     // Note: ParentType navigation property is inherited from BaseMemberModel
+
+    /// <summary>
+    /// Optional XML documentation comment for the function.
+    /// </summary>
+    [NotMapped]
+    public string? XmlDocComment { get; set; }
 }

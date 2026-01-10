@@ -24,4 +24,10 @@ public class StaticVariableModel
     [ForeignKey("ParentTypeId")] public virtual TypeModel? ParentType { get; set; }
 
     [ForeignKey("TypeReferenceId")] public virtual TypeReference? TypeReference { get; set; }
+
+    /// <summary>
+    /// Optional XML documentation comment for the static variable.
+    /// </summary>
+    [NotMapped]
+    public string? XmlDocComment { get; set; }
 }

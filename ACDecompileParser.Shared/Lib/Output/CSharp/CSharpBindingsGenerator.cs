@@ -190,7 +190,7 @@ public class CSharpBindingsGenerator
 
         // Struct declaration
         string safeBaseName = GetGeneratedTypeName(type);
-
+        AppendXmlDocComment(sb, type.XmlDocComment, indent);
         sb.AppendLine($"{indent}// {type.FullyQualifiedName}");
         sb.AppendLine($"{indent}public unsafe struct {safeBaseName}{interfaces}");
         sb.AppendLine($"{indent}{{");
@@ -335,11 +335,6 @@ public class CSharpBindingsGenerator
         {
             // Method generation might need to know the *flattened* name of the current type for constructors/destructors? 
             // IsConstructor/IsDestructor logic uses type.BaseName. 
-            // But the generated constructor name inside C# should match the struct name (safeBaseName).
-
-            // We need to pass safeBaseName to GenerateMethod? 
-            // But GenerateMethod uses IsConstructor(fb, sourceType.BaseName).
-            // The method name itself in C++ is usually the BaseName (e.g. DArray).
             // But in C#, the constructor must be DArray__int.
             // So we need to handle that.
 
@@ -563,7 +558,7 @@ public class CSharpBindingsGenerator
         // Detect underlying type
         string underlyingType = PrimitiveTypeMappings.GetEnumUnderlyingType(members);
         string safeBaseName = PrimitiveTypeMappings.CleanTypeName(type.BaseName);
-
+        AppendXmlDocComment(sb, type.XmlDocComment, indent);
         sb.AppendLine($"{indent}// {type.FullyQualifiedName}");
         sb.AppendLine($"{indent}public enum {safeBaseName} : {underlyingType}");
         sb.AppendLine($"{indent}{{");
@@ -720,6 +715,7 @@ public class CSharpBindingsGenerator
         int indentLevel)
     {
         string indent = new string(' ', indentLevel * 4);
+        AppendXmlDocComment(sb, fb.XmlDocComment, indent);
 
         // Comment out methods that belong to template types
         if (sourceType.IsGeneric)
@@ -1032,5 +1028,17 @@ public class CSharpBindingsGenerator
             .Replace("<", "__")
             .Replace(">", "")
             .Replace(",", "__");
+    }
+
+    private void AppendXmlDocComment(System.Text.StringBuilder sb, string? comment, string indent)
+    {
+        if (string.IsNullOrWhiteSpace(comment))
+            return;
+
+        var lines = comment.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+        foreach (var line in lines)
+        {
+            sb.AppendLine($"{indent}/// {line}");
+        }
     }
 }

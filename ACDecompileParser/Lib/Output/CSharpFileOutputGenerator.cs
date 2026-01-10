@@ -21,8 +21,9 @@ public class CSharpFileOutputGenerator
         _hierarchyService = hierarchyService ?? new TypeHierarchyService();
     }
 
-    public void GenerateCSharpFiles(List<TypeModel> typeModels, string outputDir = "./cs/",
-        ITypeRepository? repository = null, IProgressReporter? reporter = null)
+    public async Task GenerateCSharpFiles(List<TypeModel> typeModels, string outputDir = "./cs/",
+        ITypeRepository? repository = null, ICommentProvider? commentProvider = null,
+        IProgressReporter? reporter = null)
     {
         _repository = repository;
         var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -135,6 +136,15 @@ public class CSharpFileOutputGenerator
 
             Console.WriteLine(
                 $"[Profiling] Attach data to {filteredTypeModels.Count} types: {sw.ElapsedMilliseconds}ms");
+
+            if (commentProvider != null)
+            {
+                sw.Restart();
+                Console.WriteLine("[Profiling] Populating comments from Hallucinator...");
+                var groupProcessor = new CSharpGroupProcessor(_repository, lookupCache);
+                await groupProcessor.PopulateCommentsAsync(filteredTypeModels, commentProvider);
+                Console.WriteLine($"[Profiling] Populate comments: {sw.ElapsedMilliseconds}ms");
+            }
         }
 
         sw.Restart();

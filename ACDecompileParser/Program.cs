@@ -5,12 +5,15 @@ using ACDecompileParser.Lib.Utilities;
 using ACDecompileParser.Shared.Lib.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using ACSourceHallucinator.Data;
+using ACSourceHallucinator.Data.Repositories;
+using ACDecompileParser.Shared.Lib.Services;
 
 namespace ACDecompileParser;
 
 class Program
 {
-    static void Main(string[] args)
+    static async Task Main(string[] args)
     {
         if (args.Length == 0)
         {
@@ -24,7 +27,7 @@ class Program
         }
         else if (args[0] == "csbindings")
         {
-            RunCSharpBindings(args.Skip(1).ToArray());
+            await RunCSharpBindingsAsync(args.Skip(1).ToArray());
         }
         else
         {
@@ -249,7 +252,7 @@ class Program
         }
     }
 
-    static void RunCSharpBindings(string[] args)
+    static async Task RunCSharpBindingsAsync(string[] args)
     {
         string outputDir = "./out/";
         for (int i = 0; i < args.Length; i++)
@@ -282,12 +285,29 @@ class Program
             return;
         }
 
+        // Try to load Hallucinator comments if database exists
+        ICommentProvider? commentProvider = null;
+        string hallucinatorDbPath = Path.Combine(outputDir, "hallucinator.db");
+        if (File.Exists(hallucinatorDbPath))
+        {
+            Console.WriteLine($"Hallucinator database found at {hallucinatorDbPath}. Will include comments.");
+            var halluOptionsBuilder = new DbContextOptionsBuilder<HallucinatorDbContext>();
+            halluOptionsBuilder.UseSqlite($"Data Source={hallucinatorDbPath}");
+            var halluContext = new HallucinatorDbContext(halluOptionsBuilder.Options);
+            var resultRepo = new StageResultRepository(halluContext);
+            commentProvider = new HallucinatorCommentProvider(resultRepo);
+        }
+        else
+        {
+            Console.WriteLine("Hallucinator database not found. Skipping comments.");
+        }
+
         string csDir = Path.Combine(outputDir, "cs");
         Console.WriteLine($"Generating C# binding files for {types.Count} types to {csDir}...");
 
         var generator = new CSharpFileOutputGenerator();
         var reporter = new ConsoleProgressReporter();
-        generator.GenerateCSharpFiles(types, csDir, repo, reporter);
+        await generator.GenerateCSharpFiles(types, csDir, repo, commentProvider, reporter);
 
         Console.WriteLine("C# binding generation completed.");
     }

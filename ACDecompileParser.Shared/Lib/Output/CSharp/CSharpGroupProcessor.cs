@@ -100,4 +100,36 @@ public class CSharpGroupProcessor
 
         return _generator.Generate(type);
     }
+
+    /// <summary>
+    /// Populates XmlDocComment properties for all types and their methods using the provided provider.
+    /// </summary>
+    public async Task PopulateCommentsAsync(List<TypeModel> types, ICommentProvider commentProvider)
+    {
+        foreach (var type in types)
+        {
+            if (type.Type == TypeType.Enum)
+            {
+                type.XmlDocComment = await commentProvider.GetEnumCommentAsync(type.Id);
+            }
+            else
+            {
+                type.XmlDocComment = await commentProvider.GetStructCommentAsync(type.Id);
+            }
+
+            if (type.FunctionBodies != null)
+            {
+                foreach (var fb in type.FunctionBodies)
+                {
+                    fb.XmlDocComment = await commentProvider.GetMethodCommentAsync(fb.Id);
+                }
+            }
+
+            // Recurse into nested types if they exist
+            if (type.NestedTypes != null)
+            {
+                await PopulateCommentsAsync(type.NestedTypes, commentProvider);
+            }
+        }
+    }
 }

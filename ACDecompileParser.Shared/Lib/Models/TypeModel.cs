@@ -142,4 +142,10 @@ public class TypeModel
     /// </summary>
     [NotMapped]
     public List<TypeModel>? NestedTypes { get; set; }
+
+    /// <summary>
+    /// Optional XML documentation comment for the type.
+    /// </summary>
+    [NotMapped]
+    public string? XmlDocComment { get; set; }
 }

@@ -2,6 +2,8 @@
 
 A robust system for parsing, analyzing, and browsing decompiled C++ type information.
 
+``
+
 ## Project Overview
 
 ACDecompileHallucinator allows you to ingest raw decompiled header files, resolve complex type relationships (including templates and function pointers), and explore the type hierarchy in a user-friendly web interface.

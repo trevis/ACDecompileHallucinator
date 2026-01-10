@@ -4,6 +4,7 @@ using ACDecompileParser.Shared.Lib.Storage;
 using ACDecompileParser.Shared.Lib.Services;
 using ACDecompileParser.Shared.Lib.Output;
 using ACDecompileParser.Shared.Lib.Output.CSharp;
+using ACSourceHallucinator.Data.Repositories;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -45,6 +46,7 @@ builder.Services.AddDbContext<ACSourceHallucinator.Data.HallucinatorDbContext>(o
 builder.Services
     .AddScoped<ACSourceHallucinator.Data.Repositories.IStageResultRepository,
         ACSourceHallucinator.Data.Repositories.StageResultRepository>();
+builder.Services.AddScoped<ICommentProvider, HallucinatorCommentProvider>();
 builder.Services.AddScoped<SqlTypeRepository>();
 builder.Services.AddSingleton<ITypeRepository, InMemoryTypeRepository>();
 builder.Services.AddSingleton<ITypeHierarchyService, TypeHierarchyService>();
