@@ -1,5 +1,6 @@
 using System;
 using ACDecompileParser.Shared.Lib.Constants;
+using ACDecompileParser.Shared.Lib.Output.CSharp;
 using Xunit;
 
 namespace ACDecompileParser.Shared.Tests.Lib.Constants
@@ -19,7 +20,7 @@ namespace ACDecompileParser.Shared.Tests.Lib.Constants
             // 3. 0 -> ignored (numeric literal)
 
             string result = PrimitiveTypeMappings.MapType(input);
-            Assert.Equal("ACBindings.HashTable__uint__void_ptr", result);
+            Assert.Equal($"{CSharpBindingsGenerator.NAMESPACE}.HashTable__uint__void_ptr", result);
         }
     }
 }

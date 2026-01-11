@@ -45,9 +45,9 @@ public class RefineTypeNamesTests
         Assert.DoesNotContain("struct $A123", output);
 
         // Verify member type is stripped (using MapType)
-        Assert.Contains("public ACBindings._B456 __s0;", output);
+        Assert.Contains($"public {CSharpBindingsGenerator.NAMESPACE}._B456 __s0;", output);
         
         // Verify static member type is stripped (using MapTypeForStaticPointer)
-        Assert.Contains("public static ACBindings._C789* staticPtr", output);
+        Assert.Contains($"public static {CSharpBindingsGenerator.NAMESPACE}._C789* staticPtr", output);
     }
 }

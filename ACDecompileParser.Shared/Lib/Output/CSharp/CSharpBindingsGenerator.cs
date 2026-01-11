@@ -13,6 +13,8 @@ public class CSharpBindingsGenerator
     private readonly ITypeRepository? _repository;
     private readonly OffsetCalculationService? _offsetService;
 
+    public const string NAMESPACE = "ACBindings.Internal";
+
     public CSharpBindingsGenerator(ITypeRepository? repository = null, OffsetCalculationService? offsetService = null)
     {
         _repository = repository;
@@ -38,7 +40,7 @@ public class CSharpBindingsGenerator
     /// <summary>
     /// Generates C# binding code for a list of types with namespace header.
     /// </summary>
-    public string GenerateWithNamespace(List<TypeModel> types, string namespaceName = "ACBindings")
+    public string GenerateWithNamespace(List<TypeModel> types, string namespaceName = NAMESPACE)
     {
         var sb = new System.Text.StringBuilder();
 
@@ -255,7 +257,7 @@ public class CSharpBindingsGenerator
 
                 // Mapped type for field name (to handle flattening in field names too if needed)
                 string mappedBase = PrimitiveTypeMappings.MapType(rawFqn); // This might be ACBindings.Base__int
-                string cleanedFqn = mappedBase.Replace("ACBindings.", "").Replace(".", "_");
+                string cleanedFqn = mappedBase.Replace(NAMESPACE + ".", "").Replace(".", "_");
 
                 string fieldName = $"BaseClass_{cleanedFqn}";
                 sb.AppendLine($"{memberIndent}public {baseTypeName} {fieldName}; // {baseTypeName}");
@@ -431,7 +433,7 @@ public class CSharpBindingsGenerator
 
     private string GetFullyQualifiedName(TypeModel type)
     {
-        if (type == null) return "ACBindings.Unknown";
+        if (type == null) return NAMESPACE + ".Unknown";
 
         // For generic types, we must use the flattened name logic provided by MapType
         if (type.IsGeneric)
@@ -448,7 +450,7 @@ public class CSharpBindingsGenerator
         else
             fqn = $"{ns.Replace("::", ".")}.{baseName}";
 
-        return $"ACBindings.{fqn}";
+        return $"{NAMESPACE}.{fqn}";
     }
 
 // Returns methods directly defined on this type (not inherited)

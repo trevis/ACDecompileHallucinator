@@ -1,4 +1,5 @@
 using ACDecompileParser.Shared.Lib.Models;
+using ACDecompileParser.Shared.Lib.Output.CSharp;
 using ACDecompileParser.Shared.Lib.Utilities;
 
 namespace ACDecompileParser.Shared.Lib.Constants;
@@ -258,7 +259,7 @@ public static class PrimitiveTypeMappings
 
         // If not found, return the original (might be a custom type)
         // For custom types in C# bindings, we'll assume they're defined elsewhere
-        return "ACBindings." + CleanTypeName(baseType.Replace("::", "."));
+        return $"{CSharpBindingsGenerator.NAMESPACE}." + CleanTypeName(baseType.Replace("::", "."));
     }
 
     /// <summary>
@@ -487,8 +488,8 @@ public static class PrimitiveTypeMappings
         string clean = typeName;
 
         // Strip ACBindings. prefix for cleaner names
-        if (clean.StartsWith("ACBindings."))
-            clean = clean.Substring("ACBindings.".Length);
+        if (clean.StartsWith(CSharpBindingsGenerator.NAMESPACE + "."))
+            clean = clean.Substring(CSharpBindingsGenerator.NAMESPACE.Length);
 
         // Handle pointers
         while (clean.EndsWith("*"))
@@ -592,7 +593,7 @@ public static class PrimitiveTypeMappings
         if (CppToCSharp.TryGetValue(normalized, out string? csType))
         {
             // Only return if it's an actual C# primitive (not ACBindings.* or other custom types)
-            if (!csType.StartsWith("ACBindings.") && !csType.StartsWith("System."))
+            if (!csType.StartsWith(CSharpBindingsGenerator.NAMESPACE + ".") && !csType.StartsWith("System."))
             {
                 return csType;
             }

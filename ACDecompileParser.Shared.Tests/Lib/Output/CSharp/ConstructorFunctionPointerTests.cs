@@ -68,10 +68,12 @@ public class ConstructorFunctionPointerTests
         // Verify the constructor signature
         // BEFORE FIX: public DBOCache(System.IntPtr allocator, uint dbtype)
         // AFTER FIX: public DBOCache(delegate* unmanaged[Cdecl]<ACBindings.DBObj*> allocator, uint dbtype)
-        
-        Assert.Contains("public DBOCache(delegate* unmanaged[Cdecl]<ACBindings.DBObj*> allocator, uint dbtype)", output);
-        
+
+        Assert.Contains(
+            $"public DBOCache(delegate* unmanaged[Cdecl]<{CSharpBindingsGenerator.NAMESPACE}.DBObj*> allocator, uint dbtype)",
+            output);
+
         // Also verify the internal call casts it correctly (this part might already be correct or need adjustment, but the signature is key)
-        Assert.Contains("_ConstructorInternal(allocator, dbtype)", output); 
+        Assert.Contains("_ConstructorInternal(allocator, dbtype)", output);
     }
 }

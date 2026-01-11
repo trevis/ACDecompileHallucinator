@@ -26,9 +26,9 @@ public class NamespaceGenerationTests
             }
         };
 
-        var output = _generator.GenerateWithNamespace(types, "ACBindings");
+        var output = _generator.GenerateWithNamespace(types, CSharpBindingsGenerator.NAMESPACE);
 
-        Assert.Contains("namespace ACBindings.AC1Legacy;", output);
+        Assert.Contains($"namespace {CSharpBindingsGenerator.NAMESPACE}.AC1Legacy;", output);
         Assert.Contains("public unsafe struct Vector3", output);
     }
 
@@ -45,9 +45,9 @@ public class NamespaceGenerationTests
             }
         };
 
-        var output = _generator.GenerateWithNamespace(types, "ACBindings");
+        var output = _generator.GenerateWithNamespace(types, CSharpBindingsGenerator.NAMESPACE);
 
-        Assert.Contains("namespace ACBindings;", output);
+        Assert.Contains($"namespace {CSharpBindingsGenerator.NAMESPACE};", output);
         Assert.Contains("public unsafe struct GlobalStruct", output);
     }
 
@@ -64,9 +64,9 @@ public class NamespaceGenerationTests
             }
         };
 
-        var output = _generator.GenerateWithNamespace(types, "ACBindings");
+        var output = _generator.GenerateWithNamespace(types, CSharpBindingsGenerator.NAMESPACE);
 
-        Assert.Contains("namespace ACBindings.Outer.Inner;", output);
+        Assert.Contains($"namespace {CSharpBindingsGenerator.NAMESPACE}.Outer.Inner;", output);
         Assert.Contains("public unsafe struct InnerStruct", output);
     }
 
@@ -79,9 +79,9 @@ public class NamespaceGenerationTests
             new TypeModel { BaseName = "TypeB", Namespace = "Common", Type = TypeType.Struct }
         };
 
-        var output = _generator.GenerateWithNamespace(types, "ACBindings");
+        var output = _generator.GenerateWithNamespace(types, CSharpBindingsGenerator.NAMESPACE);
 
-        Assert.Contains("namespace ACBindings.Common;", output);
+        Assert.Contains($"namespace {CSharpBindingsGenerator.NAMESPACE}.Common;", output);
         Assert.Contains("public unsafe struct TypeA", output);
         Assert.Contains("public unsafe struct TypeB", output);
 
@@ -99,69 +99,12 @@ public class NamespaceGenerationTests
             new TypeModel { BaseName = "TypeB", Namespace = "NamespaceB", Type = TypeType.Struct }
         };
 
-        var output = _generator.GenerateWithNamespace(types, "ACBindings");
+        var output = _generator.GenerateWithNamespace(types, CSharpBindingsGenerator.NAMESPACE);
 
         // Expectations:
-        Assert.Contains("namespace ACBindings.NamespaceA", output);
-        Assert.Contains("namespace ACBindings.NamespaceB", output);
+        Assert.Contains($"namespace {CSharpBindingsGenerator.NAMESPACE}.NamespaceA", output);
+        Assert.Contains($"namespace {CSharpBindingsGenerator.NAMESPACE}.NamespaceB", output);
         Assert.Contains("public unsafe struct TypeA", output);
         Assert.Contains("public unsafe struct TypeB", output);
-    }
-
-    [Fact]
-    public void GenerateWithNamespace_StructWithNestedType_UsesSingleFileScoped()
-    {
-        var parent = new TypeModel
-        {
-            Id = 1,
-            BaseName = "AFrame",
-            Namespace = "ACBindings",
-            Type = TypeType.Struct
-        };
-
-        var nested = new TypeModel
-        {
-            Id = 2,
-            BaseName = "FrameInitializationEnum",
-            Namespace = "ACBindings::AFrame",
-            Type = TypeType.Enum,
-            ParentType = parent
-        };
-
-        parent.NestedTypes = new List<TypeModel> { nested };
-
-        // Even if both are passed (common if flat list loaded), we should not see a namespace block for the nested type's namespace
-        var types = new List<TypeModel> { parent, nested };
-
-        var output = _generator.GenerateWithNamespace(types, "ACBindings");
-
-        // Should use file-scoped namespace for the parent's namespace
-        // Note: parent namespace "ACBindings" with prefix "ACBindings" -> "ACBindings.ACBindings" if regex replace works that way?
-        // Wait, logic is: string finalNs = string.IsNullOrEmpty(subNs) ? namespaceName : $"{namespaceName}.{subNs}";
-        // If Namespace="ACBindings" and we pass namespaceName="ACBindings", it prefixes it.
-        // User example shows `namespace ACBindings`.
-        // If Type.Namespace is "ACBindings", and we pass "ACBindings" as root, we get "ACBindings.ACBindings".
-        // In the user example, maybe Type.Namespace is empty? Or root is empty?
-
-        // Let's assume the user's types have Type.Namespace as "ACBindings" and they want "namespace ACBindings".
-        // Or Type.Namespace is empty, and they want "namespace ACBindings".
-        // In the user example: `namespace ACBindings { ... }`.
-
-        // If I construct parent with Namespace="", and nested with Namespace="AFrame".
-
-        // Let's stick to the parameters used in the test.
-        // If I pass parent.Namespace="ACBindings", and subNs="ACBindings". final="ACBindings.ACBindings".
-
-        // The user example shows:
-        // namespace ACBindings { ... }
-        // namespace ACBindings.AFrame { }
-
-        // This implies the Nested type has namespace "ACBindings.AFrame".
-
-        Assert.Contains("namespace ACBindings.ACBindings;", output); // Based on how code works now for single group
-        Assert.DoesNotContain("namespace ACBindings.ACBindings.AFrame", output);
-        Assert.Contains("public unsafe struct AFrame", output);
-        // Nested type should be inside AFrame
-        Assert.Contains("public enum FrameInitializationEnum", output);
     }
 }

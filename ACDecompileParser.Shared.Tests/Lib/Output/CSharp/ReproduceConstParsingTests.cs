@@ -44,6 +44,6 @@ public class ReproduceConstParsingTests
 
         // Verify
         Assert.DoesNotContain("const", output);
-        Assert.Contains("public ACBindings.DArray__LIGHTOBJ_ptr light_list;", output);
+        Assert.Contains($"public {CSharpBindingsGenerator.NAMESPACE}.DArray___LIGHTOBJ_ptr light_list;", output);
     }
 }

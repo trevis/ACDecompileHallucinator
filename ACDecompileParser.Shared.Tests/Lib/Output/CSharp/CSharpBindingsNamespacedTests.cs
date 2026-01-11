@@ -56,11 +56,11 @@ public class CSharpBindingsNamespacedTests
         var output = _generator.GenerateWithNamespace(new List<TypeModel> { vectorType });
         _testOutput.WriteLine(output);
 
-        Assert.Contains("namespace ACBindings.AC1Legacy;", output);
+        Assert.Contains($"namespace {CSharpBindingsGenerator.NAMESPACE}.AC1Legacy;", output);
         Assert.Contains("public unsafe struct Vector3", output);
         
         // This is the check failing for the user allegedly
         // Expecting: delegate* unmanaged[Thiscall]<ref ACBindings.AC1Legacy.Vector3, int>
-        Assert.Contains("delegate* unmanaged[Thiscall]<ref ACBindings.AC1Legacy.Vector3, int>", output);
+        Assert.Contains($"delegate* unmanaged[Thiscall]<ref {CSharpBindingsGenerator.NAMESPACE}.AC1Legacy.Vector3, int>", output);
     }
 }

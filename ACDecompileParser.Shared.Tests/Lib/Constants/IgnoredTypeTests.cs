@@ -1,5 +1,6 @@
 using ACDecompileParser.Shared.Lib.Constants;
 using ACDecompileParser.Shared.Lib.Models;
+using ACDecompileParser.Shared.Lib.Output.CSharp;
 using Xunit;
 
 namespace ACDecompileParser.Shared.Tests.Lib.Constants;
@@ -47,7 +48,7 @@ public class IgnoredTypeTests
         // Assert
         Assert.Equal("System.IntPtr", result);
     }
-    
+
     [Fact]
     public void MapType_WithNonIgnoredTypePointer_ReturnsTypedPointer()
     {
@@ -69,6 +70,6 @@ public class IgnoredTypeTests
         var result = PrimitiveTypeMappings.MapType("Vector3*", typeRef);
 
         // Assert
-        Assert.Equal("ACBindings.Vector3*", result);
+        Assert.Equal($"{CSharpBindingsGenerator.NAMESPACE}.Vector3*", result);
     }
 }

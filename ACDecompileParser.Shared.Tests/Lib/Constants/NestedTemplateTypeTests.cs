@@ -1,4 +1,5 @@
 using ACDecompileParser.Shared.Lib.Constants;
+using ACDecompileParser.Shared.Lib.Output.CSharp;
 using Xunit;
 
 namespace ACDecompileParser.Shared.Tests.Lib.Constants;
@@ -9,11 +10,12 @@ namespace ACDecompileParser.Shared.Tests.Lib.Constants;
 public class NestedTemplateTypeTests
 {
     [Theory]
-    [InlineData("QTIsaac<8,unsigned long>::randctx", "ACBindings.QTIsaac__uint.randctx")]
-    [InlineData("DArray<int>::iterator", "ACBindings.DArray__int.iterator")]
-    [InlineData("Map<string,int>::Node", "ACBindings.Map__string__int.Node")]
-    [InlineData("Outer<T>::Inner::Deep", "ACBindings.Outer__T.Inner.Deep")]
-    public void MapType_NestedTypeWithinTemplateInstantiation_PreservesNestedTypeSuffix(string cppType, string expectedCsType)
+    [InlineData("QTIsaac<8,unsigned long>::randctx", $"{CSharpBindingsGenerator.NAMESPACE}.QTIsaac__uint.randctx")]
+    [InlineData("DArray<int>::iterator", $"{CSharpBindingsGenerator.NAMESPACE}.DArray__int.iterator")]
+    [InlineData("Map<string,int>::Node", $"{CSharpBindingsGenerator.NAMESPACE}.Map___string__int.Node")]
+    [InlineData("Outer<T>::Inner::Deep", $"{CSharpBindingsGenerator.NAMESPACE}.Outer___T.Inner.Deep")]
+    public void MapType_NestedTypeWithinTemplateInstantiation_PreservesNestedTypeSuffix(string cppType,
+        string expectedCsType)
     {
         // Act
         var result = PrimitiveTypeMappings.MapType(cppType);
@@ -32,7 +34,7 @@ public class NestedTemplateTypeTests
         var result = PrimitiveTypeMappings.MapType(cppType);
 
         // Assert
-        Assert.Equal("ACBindings.QTIsaac__uint", result);
+        Assert.Equal($"{CSharpBindingsGenerator.NAMESPACE}.QTIsaac__uint", result);
     }
 
     [Fact]
@@ -45,6 +47,6 @@ public class NestedTemplateTypeTests
         var result = PrimitiveTypeMappings.MapType(cppType);
 
         // Assert
-        Assert.Equal("ACBindings.QTIsaac__uint.randctx*", result);
+        Assert.Equal($"{CSharpBindingsGenerator.NAMESPACE}.QTIsaac__uint.randctx*", result);
     }
 }

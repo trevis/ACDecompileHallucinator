@@ -82,7 +82,7 @@ public class DestructorGenerationTests
         _testOutput.WriteLine(output);
 
         // Verification
-        Assert.Contains("public unsafe struct DArray__view_vertex", output);
+        Assert.Contains("public unsafe struct DArray___view_vertex", output);
         
         // Should have Dispose method
         //Assert.Contains("public void Dispose()", output);

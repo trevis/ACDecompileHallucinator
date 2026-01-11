@@ -57,7 +57,7 @@ public class ArrayFieldGenerationTests
             output);
         // Expected helper property
         Assert.Contains(
-            "public ACBindings.CAsyncStateMachine.CAsyncStateData** m_aInplaceBuckets => (ACBindings.CAsyncStateMachine.CAsyncStateData**)System.Runtime.CompilerServices.Unsafe.AsPointer(ref m_aInplaceBuckets_Raw[0]);",
+            $"public {CSharpBindingsGenerator.NAMESPACE}.CAsyncStateMachine.CAsyncStateData** m_aInplaceBuckets => ({CSharpBindingsGenerator.NAMESPACE}.CAsyncStateMachine.CAsyncStateData**)System.Runtime.CompilerServices.Unsafe.AsPointer(ref m_aInplaceBuckets_Raw[0]);",
             output);
     }
 
@@ -92,10 +92,11 @@ public class ArrayFieldGenerationTests
         _testOutput.WriteLine(output);
 
         // Expected backing field
-        Assert.Contains("public fixed byte m_items_Raw[10 * sizeof(ACBindings.MyStruct)];", output);
+        Assert.Contains($"public fixed byte m_items_Raw[10 * sizeof({CSharpBindingsGenerator.NAMESPACE}.MyStruct)];",
+            output);
         // Expected helper property
         Assert.Contains(
-            "public ACBindings.MyStruct* m_items => (ACBindings.MyStruct*)System.Runtime.CompilerServices.Unsafe.AsPointer(ref m_items_Raw[0]);",
+            $"public {CSharpBindingsGenerator.NAMESPACE}.MyStruct* m_items => ({CSharpBindingsGenerator.NAMESPACE}.MyStruct*)System.Runtime.CompilerServices.Unsafe.AsPointer(ref m_items_Raw[0]);",
             output);
     }
 

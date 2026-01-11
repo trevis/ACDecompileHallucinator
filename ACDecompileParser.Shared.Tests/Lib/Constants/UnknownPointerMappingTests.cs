@@ -1,5 +1,6 @@
 using ACDecompileParser.Shared.Lib.Constants;
 using ACDecompileParser.Shared.Lib.Models;
+using ACDecompileParser.Shared.Lib.Output.CSharp;
 using Xunit;
 
 namespace ACDecompileParser.Shared.Tests.Lib.Constants;
@@ -28,7 +29,7 @@ public class UnknownPointerMappingTests
         var result = PrimitiveTypeMappings.MapType("SomeType*", typeRef);
 
         // Assert: Should return typed pointer
-        Assert.Equal("ACBindings.SomeType*", result);
+        Assert.Equal($"{CSharpBindingsGenerator.NAMESPACE}.SomeType*", result);
     }
 
     [Fact]
@@ -106,7 +107,7 @@ public class UnknownPointerMappingTests
         var result = PrimitiveTypeMappings.MapType("SomeType*");
 
         // Assert: Should use default behavior (typed pointer)
-        Assert.Equal("ACBindings.SomeType*", result);
+        Assert.Equal($"{CSharpBindingsGenerator.NAMESPACE}.SomeType*", result);
     }
 
     [Fact]
@@ -168,6 +169,6 @@ public class UnknownPointerMappingTests
         var result = PrimitiveTypeMappings.MapTypeForStaticPointer("KnownType*", typeRef);
 
         // Assert
-        Assert.Equal("ACBindings.KnownType*", result);
+        Assert.Equal($"{CSharpBindingsGenerator.NAMESPACE}.KnownType*", result);
     }
 }

@@ -55,7 +55,7 @@ public class GenericMethodNameTests
         // Expectation: The generic part <UIElement_Text> should be flattened to __UIElement_Text
         // Note: Stdcall is treated as static, so 'this' is explicit
         Assert.Contains(
-            "public static int GetChildRecursiveTemplate__UIElement_Text(ACBindings.UIElement* this_, uint ID)",
+            $"public static int GetChildRecursiveTemplate__UIElement_Text({CSharpBindingsGenerator.NAMESPACE}.UIElement* this_, uint ID)",
             output);
     }
 }

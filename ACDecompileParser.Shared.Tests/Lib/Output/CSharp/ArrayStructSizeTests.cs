@@ -106,7 +106,7 @@ public class ArrayStructSizeTests
 
         // Expected helper property should cast to correct type pointer
         Assert.Contains(
-            "public ACBindings.MyStruct* m_items => (ACBindings.MyStruct*)System.Runtime.CompilerServices.Unsafe.AsPointer(ref m_items_Raw[0]);",
+            $"public {CSharpBindingsGenerator.NAMESPACE}.MyStruct* m_items => ({CSharpBindingsGenerator.NAMESPACE}.MyStruct*)System.Runtime.CompilerServices.Unsafe.AsPointer(ref m_items_Raw[0]);",
             output);
     }
 }
