@@ -10,7 +10,7 @@ public class CliOptions
     public string LlmBaseUrl { get; init; } = "http://localhost:1234/v1";
     public required string LlmModel { get; init; }
     public int MaxTokens { get; init; } = 131072;
-    public double Temperature { get; init; } = 0.3;
+    public double Temperature { get; init; } = 0.35;
     public int TimeoutMinutes { get; init; } = 15;
 
     // Pipeline control

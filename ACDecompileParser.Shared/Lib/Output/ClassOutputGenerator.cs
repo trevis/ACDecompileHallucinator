@@ -338,7 +338,7 @@ public class ClassOutputGenerator : TypeOutputGeneratorBase
                 string signature = body.FunctionSignature?.FullyQualifiedName ?? body.FullyQualifiedName;
                 string escapedSignature = signature.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
 
-                string injection = $"<para>Offset: 0x{offsetStr}<br /><code>{escapedSignature}</code></para>";
+                string injection = $"<code>Offset: 0x{offsetStr}\n{escapedSignature}</code>";
 
                 string finalComment = body.XmlDocComment;
                 if (string.IsNullOrWhiteSpace(finalComment))

@@ -762,7 +762,7 @@ public class CSharpBindingsGenerator
         string signature = sig.FullyQualifiedName ?? fb.FullyQualifiedName;
         string escapedSignature = signature.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
 
-        string injection = $"<para>Offset: 0x{offsetStr}<br /><code>{escapedSignature}</code></para>";
+        string injection = $"<code>Offset: 0x{offsetStr}\n{escapedSignature}</code>";
 
         string finalComment = fb.XmlDocComment;
         if (string.IsNullOrWhiteSpace(finalComment))

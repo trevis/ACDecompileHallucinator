@@ -19,7 +19,7 @@ public static class ManualHelpers
               """,
         ["AC1Legacy::PSRefBuffer"] = """
              namespace ACBindings.Internal.AC1Legacy;
-             public unsafe struct PSRefBuffer__char
+             public unsafe struct PSRefBuffer__sbyte
              {
                  public Turbine_RefCount _ref;
                  public int m_len;
@@ -41,14 +41,14 @@ public static class ManualHelpers
              using System.Runtime.CompilerServices;
              namespace ACBindings.Internal.AC1Legacy;
              
-             public unsafe struct PStringBase_char
+             public unsafe struct PStringBase__sbyte
              {
-                 public PSRefBuffer__char* m_buffer;
+                 public PSRefBuffer__sbyte* m_buffer;
              
-                 public PStringBase_char(string str)
+                 public PStringBase__sbyte(string str)
                  {
                      m_buffer = *s_NullBuffer;
-                     __Ctor((PStringBase_char*)Unsafe.AsPointer(ref this), System.Text.Encoding.ASCII.GetBytes(str + '\0'));
+                     __Ctor((PStringBase__sbyte*)Unsafe.AsPointer(ref this), System.Text.Encoding.ASCII.GetBytes(str + '\0'));
                  }
              
                  public override string ToString()
@@ -58,68 +58,68 @@ public static class ManualHelpers
                  }
              
                  // Implicit conversions - char version
-                 public static implicit operator PStringBase_char(string inStr) => new(inStr);
+                 public static implicit operator PStringBase__sbyte(string inStr) => new(inStr);
              
                  // Constructors (flattened)
-                 public static delegate* unmanaged[Thiscall]<PStringBase_char*, byte[], void> __Ctor
-                     = (delegate* unmanaged[Thiscall]<PStringBase_char*, byte[], void>)0x0048C3E0;
+                 public static delegate* unmanaged[Thiscall]<PStringBase__sbyte*, byte[], void> __Ctor
+                     = (delegate* unmanaged[Thiscall]<PStringBase__sbyte*, byte[], void>)0x0048C3E0;
              
-                 public static delegate* unmanaged[Thiscall]<PStringBase_char*, int, void> __Ctor_int32
-                     = (delegate* unmanaged[Thiscall]<PStringBase_char*, int, void>)0x004ADBA0;
+                 public static delegate* unmanaged[Thiscall]<PStringBase__sbyte*, int, void> __Ctor_int32
+                     = (delegate* unmanaged[Thiscall]<PStringBase__sbyte*, int, void>)0x004ADBA0;
              
                  // Methods - only char-specific ones
                  public uint GetPackSize()
-                     => ((delegate* unmanaged[Thiscall]<ref PStringBase_char, uint>)0x004FD1F0)(ref this);
+                     => ((delegate* unmanaged[Thiscall]<ref PStringBase__sbyte, uint>)0x004FD1F0)(ref this);
              
                  public uint Pack(void** addr, uint size)
-                     => ((delegate* unmanaged[Thiscall]<ref PStringBase_char, void**, uint, uint>)0x004FD290)(ref this, addr, size);
+                     => ((delegate* unmanaged[Thiscall]<ref PStringBase__sbyte, void**, uint, uint>)0x004FD290)(ref this, addr, size);
              
                  public int UnPack(void** addr, uint size)
-                     => ((delegate* unmanaged[Thiscall]<ref PStringBase_char, void**, uint, int>)0x004FD460)(ref this, addr, size);
+                     => ((delegate* unmanaged[Thiscall]<ref PStringBase__sbyte, void**, uint, int>)0x004FD460)(ref this, addr, size);
              
                  public void allocate_ref_buffer(uint len)
-                     => ((delegate* unmanaged[Thiscall]<ref PStringBase_char, uint, void>)0x00403560)(ref this, len);
+                     => ((delegate* unmanaged[Thiscall]<ref PStringBase__sbyte, uint, void>)0x00403560)(ref this, len);
              
                  public void append_n_chars(byte* str, uint count)
-                     => ((delegate* unmanaged[Thiscall]<ref PStringBase_char, byte*, uint, void>)0x004910C0)(ref this, str, count);
+                     => ((delegate* unmanaged[Thiscall]<ref PStringBase__sbyte, byte*, uint, void>)0x004910C0)(ref this, str, count);
              
                  public void break_reference()
-                     => ((delegate* unmanaged[Thiscall]<ref PStringBase_char, void>)0x00411870)(ref this);
+                     => ((delegate* unmanaged[Thiscall]<ref PStringBase__sbyte, void>)0x00411870)(ref this);
              
                  public void clear()
-                     => ((delegate* unmanaged[Thiscall]<ref PStringBase_char, void>)0x004AB990)(ref this);
+                     => ((delegate* unmanaged[Thiscall]<ref PStringBase__sbyte, void>)0x004AB990)(ref this);
              
-                 public int cmp(PStringBase_char* rhs, int case_sensitive)
-                     => ((delegate* unmanaged[Thiscall]<ref PStringBase_char, PStringBase_char*, int, int>)0x004ABA90)(ref this, rhs, case_sensitive);
+                 public int cmp(PStringBase__sbyte* rhs, int case_sensitive)
+                     => ((delegate* unmanaged[Thiscall]<ref PStringBase__sbyte, PStringBase__sbyte*, int, int>)0x004ABA90)(ref this, rhs, case_sensitive);
              
                  public uint compute_hash()
-                     => ((delegate* unmanaged[Thiscall]<ref PStringBase_char, uint>)0x004FE440)(ref this);
+                     => ((delegate* unmanaged[Thiscall]<ref PStringBase__sbyte, uint>)0x004FE440)(ref this);
              
-                 public byte eq(PStringBase_char* rhs, int case_sensitive)
-                     => ((delegate* unmanaged[Thiscall]<ref PStringBase_char, PStringBase_char*, int, byte>)0x004AC350)(ref this, rhs, case_sensitive);
+                 public byte eq(PStringBase__sbyte* rhs, int case_sensitive)
+                     => ((delegate* unmanaged[Thiscall]<ref PStringBase__sbyte, PStringBase__sbyte*, int, byte>)0x004AC350)(ref this, rhs, case_sensitive);
              
-                 public int find_substring(PStringBase_char* str)
-                     => ((delegate* unmanaged[Thiscall]<ref PStringBase_char, PStringBase_char*, int>)0x00542EA0)(ref this, str);
+                 public int find_substring(PStringBase__sbyte* str)
+                     => ((delegate* unmanaged[Thiscall]<ref PStringBase__sbyte, PStringBase__sbyte*, int>)0x00542EA0)(ref this, str);
              
-                 public int replace(PStringBase_char* search, PStringBase_char* str)
-                     => ((delegate* unmanaged[Thiscall]<ref PStringBase_char, PStringBase_char*, PStringBase_char*, int>)0x00566D10)(ref this, search, str);
+                 public int replace(PStringBase__sbyte* search, PStringBase__sbyte* str)
+                     => ((delegate* unmanaged[Thiscall]<ref PStringBase__sbyte, PStringBase__sbyte*, PStringBase__sbyte*, int>)0x00566D10)(ref this, search, str);
              
                  public void set(byte* str)
-                     => ((delegate* unmanaged[Thiscall]<ref PStringBase_char, byte*, void>)0x004034C0)(ref this, str);
+                     => ((delegate* unmanaged[Thiscall]<ref PStringBase__sbyte, byte*, void>)0x004034C0)(ref this, str);
              
                  public PStringBase__ushort* to_wpstring(PStringBase__ushort* result, ushort i_sourceCodePage)
-                     => ((delegate* unmanaged[Thiscall]<ref PStringBase_char, PStringBase__ushort*, ushort, PStringBase__ushort*>)0x005571C0)(ref this, result, i_sourceCodePage);
+                     => ((delegate* unmanaged[Thiscall]<ref PStringBase__sbyte, PStringBase__ushort*, ushort, PStringBase__ushort*>)0x005571C0)(ref this, result, i_sourceCodePage);
              
-                 public void trim(int pre, int post, PStringBase_char filter)
-                     => ((delegate* unmanaged[Thiscall]<ref PStringBase_char, int, int, PStringBase_char, void>)0x0056F9A0)(ref this, pre, post, filter);
+                 public void trim(int pre, int post, PStringBase__sbyte filter)
+                     => ((delegate* unmanaged[Thiscall]<ref PStringBase__sbyte, int, int, PStringBase__sbyte, void>)0x0056F9A0)(ref this, pre, post, filter);
              
-                 public int vsprintf(char* fmt, char* args)
-                     => ((delegate* unmanaged[Thiscall]<ref PStringBase_char, byte*, byte*, int>)0x00487480)(ref this, fmt, args);
+                 public int vsprintf(byte* fmt, byte* args)
+                     => ((delegate* unmanaged[Thiscall]<ref PStringBase__sbyte, byte*, byte*, int>)0x00487480)(ref this, fmt, args);
              
                  // Globals - char version
-                 public static PSRefBuffer__char** s_NullBuffer = (PSRefBuffer__char**)0x008EF11C;
-                 public static PStringBase_char* null_string = (PStringBase_char*)0x008EF120;
-                 public static PStringBase_char* whitespace_string = (PStringBase_char*)0x008EF124;
+                 public static PSRefBuffer__sbyte** s_NullBuffer = (PSRefBuffer__sbyte**)0x008EF11C;
+                 public static PStringBase__sbyte* null_string = (PStringBase__sbyte*)0x008EF120;
+                 public static PStringBase__sbyte* whitespace_string = (PStringBase__sbyte*)0x008EF124;
              }
              
              public unsafe struct PStringBase__ushort
@@ -157,8 +157,8 @@ public static class ManualHelpers
                  public void set(ushort* str)
                      => ((delegate* unmanaged[Thiscall]<ref PStringBase__ushort, ushort*, void>)0x0055F580)(ref this, str);
              
-                 public PStringBase_char* to_spstring(PStringBase_char* result, ushort i_targetCodePage)
-                     => ((delegate* unmanaged[Thiscall]<ref PStringBase__ushort, PStringBase_char*, ushort, PStringBase_char*>)0x00546290)(ref this, result, i_targetCodePage);
+                 public PStringBase__sbyte* to_spstring(PStringBase__sbyte* result, ushort i_targetCodePage)
+                     => ((delegate* unmanaged[Thiscall]<ref PStringBase__ushort, PStringBase__sbyte*, ushort, PStringBase__sbyte*>)0x00546290)(ref this, result, i_targetCodePage);
              
                  // Globals - ushort version
                  public static PSRefBuffer__ushort** s_NullBuffer_w = (PSRefBuffer__ushort**)0x008EF12C;
