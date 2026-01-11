@@ -45,7 +45,6 @@ public class CommentStructsStage : StageBase
         return structs.Select(s => new WorkItem
         {
             EntityType = EntityType.Struct,
-            EntityId = s.Id,
             EntityName = s.BaseName,
             FullyQualifiedName = s.StoredFullyQualifiedName
         }).ToList();
@@ -55,7 +54,7 @@ public class CommentStructsStage : StageBase
         WorkItem item, IReadOnlyList<string> failureHistory, string? previousResponse, CancellationToken ct)
     {
         var structDefinition = await ReferenceGenerator.GenerateStructReferenceAsync(
-            item.EntityId,
+            item.FullyQualifiedName,
             new ReferenceOptions
             {
                 IncludeComments = false,
@@ -65,7 +64,7 @@ public class CommentStructsStage : StageBase
             ct);
 
         var contextReferences = await ReferenceGenerator.GenerateStructReferenceAsync(
-            item.EntityId,
+            item.FullyQualifiedName,
             new ReferenceOptions
             {
                 IncludeComments = false,
@@ -132,7 +131,7 @@ public class CommentStructsStage : StageBase
         WorkItem item, string generatedContent, CancellationToken ct)
     {
         var structDefinition = await ReferenceGenerator.GenerateStructReferenceAsync(
-            item.EntityId,
+            item.FullyQualifiedName,
             new ReferenceOptions
             {
                 IncludeComments = false,
@@ -142,7 +141,7 @@ public class CommentStructsStage : StageBase
             ct);
 
         var contextReferences = await ReferenceGenerator.GenerateStructReferenceAsync(
-            item.EntityId,
+            item.FullyQualifiedName,
             new ReferenceOptions
             {
                 IncludeComments = false,

@@ -13,23 +13,26 @@ public class HallucinatorCommentProvider : ICommentProvider
         _stageResultRepository = stageResultRepository;
     }
 
-    public async Task<string?> GetEnumCommentAsync(int typeId)
+    public async Task<string?> GetEnumCommentAsync(string fullyQualifiedName)
     {
-        var result = await _stageResultRepository.GetSuccessfulResultAsync("CommentEnums", EntityType.Enum, typeId);
+        var result =
+            await _stageResultRepository.GetSuccessfulResultAsync("CommentEnums", EntityType.Enum, fullyQualifiedName);
         return result?.GeneratedContent;
     }
 
-    public async Task<string?> GetStructCommentAsync(int typeId)
+    public async Task<string?> GetStructCommentAsync(string fullyQualifiedName)
     {
-        var result = await _stageResultRepository.GetSuccessfulResultAsync("CommentStructs", EntityType.Struct, typeId);
+        var result =
+            await _stageResultRepository.GetSuccessfulResultAsync("CommentStructs", EntityType.Struct,
+                fullyQualifiedName);
         return result?.GeneratedContent;
     }
 
-    public async Task<string?> GetMethodCommentAsync(int methodId)
+    public async Task<string?> GetMethodCommentAsync(string fullyQualifiedName)
     {
         var result =
             await _stageResultRepository.GetSuccessfulResultAsync("CommentFunctions", EntityType.StructMethod,
-                methodId);
+                fullyQualifiedName);
         return result?.GeneratedContent;
     }
 }

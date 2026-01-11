@@ -26,9 +26,10 @@ public class HallucinatorCommentTests
     [Fact]
     public async Task PopulateCommentsAsync_AddsCommentsToEnum()
     {
-        var type = new TypeModel { Id = 1, BaseName = "MyEnum", Type = TypeType.Enum };
+        var type = new TypeModel { Id = 1, BaseName = "MyEnum", Type = TypeType.Enum, Namespace = "NS" };
         var types = new List<TypeModel> { type };
-        _mockCommentProvider.Setup(p => p.GetEnumCommentAsync(1)).ReturnsAsync("/// <summary>Enum comment</summary>");
+        _mockCommentProvider.Setup(p => p.GetEnumCommentAsync("NS::MyEnum"))
+            .ReturnsAsync("/// <summary>Enum comment</summary>");
 
         await _processor.PopulateCommentsAsync(types, _mockCommentProvider.Object);
 
@@ -38,9 +39,9 @@ public class HallucinatorCommentTests
     [Fact]
     public async Task PopulateCommentsAsync_AddsCommentsToStruct()
     {
-        var type = new TypeModel { Id = 2, BaseName = "MyStruct", Type = TypeType.Struct };
+        var type = new TypeModel { Id = 2, BaseName = "MyStruct", Type = TypeType.Struct, Namespace = "NS" };
         var types = new List<TypeModel> { type };
-        _mockCommentProvider.Setup(p => p.GetStructCommentAsync(2))
+        _mockCommentProvider.Setup(p => p.GetStructCommentAsync("NS::MyStruct"))
             .ReturnsAsync("/// <summary>Struct comment</summary>");
 
         await _processor.PopulateCommentsAsync(types, _mockCommentProvider.Object);
@@ -51,16 +52,17 @@ public class HallucinatorCommentTests
     [Fact]
     public async Task PopulateCommentsAsync_AddsCommentsToMethods()
     {
-        var method = new FunctionBodyModel { Id = 3, FullyQualifiedName = "MyStruct::MyMethod" };
+        var method = new FunctionBodyModel { Id = 3, FullyQualifiedName = "NS::MyStruct::MyMethod" };
         var type = new TypeModel
         {
             Id = 2,
             BaseName = "MyStruct",
+            Namespace = "NS",
             Type = TypeType.Struct,
             FunctionBodies = new List<FunctionBodyModel> { method }
         };
         var types = new List<TypeModel> { type };
-        _mockCommentProvider.Setup(p => p.GetMethodCommentAsync(3))
+        _mockCommentProvider.Setup(p => p.GetMethodCommentAsync("NS::MyStruct::MyMethod"))
             .ReturnsAsync("/// <summary>Method comment</summary>");
 
         await _processor.PopulateCommentsAsync(types, _mockCommentProvider.Object);

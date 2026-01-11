@@ -31,7 +31,7 @@ public class ReferenceTextGenerator : IReferenceTextGenerator
     }
 
     public async Task<string> GenerateReferencesForFunctionAsync(
-        int functionBodyId, ReferenceOptions options, CancellationToken ct = default)
+        string fullyQualifiedName, ReferenceOptions options, CancellationToken ct = default)
     {
         var function = await _typeDb.FunctionBodies
             .Include(f => f.FunctionSignature!)
@@ -40,85 +40,88 @@ public class ReferenceTextGenerator : IReferenceTextGenerator
             .Include(f => f.FunctionSignature!)
             .ThenInclude(s => s.ReturnTypeReference)
             .Include(f => f.ParentType)
-            .FirstOrDefaultAsync(f => f.Id == functionBodyId, ct);
+            .FirstOrDefaultAsync(f => f.FullyQualifiedName == fullyQualifiedName, ct);
 
         if (function == null)
-            throw new ArgumentException($"Function body {functionBodyId} not found");
+            throw new ArgumentException($"Function body {fullyQualifiedName} not found");
 
-        var referencedTypeIds = new HashSet<int>();
+        var referencedTypeNames = new HashSet<string>();
         var sections = new List<string>();
 
         // Collect parent struct
-        if (function.ParentId.HasValue)
+        if (function.ParentType != null)
         {
-            referencedTypeIds.Add(function.ParentId.Value);
+            referencedTypeNames.Add(function.ParentType.StoredFullyQualifiedName);
         }
 
         // Collect return type
-        if (function.FunctionSignature?.ReturnTypeReference?.ReferencedTypeId.HasValue == true)
+        if (function.FunctionSignature?.ReturnTypeReference?.ReferencedType != null)
         {
-            referencedTypeIds.Add(function.FunctionSignature.ReturnTypeReference.ReferencedTypeId.Value);
+            referencedTypeNames.Add(function.FunctionSignature.ReturnTypeReference.ReferencedType
+                .StoredFullyQualifiedName);
         }
 
         // Collect parameter types
         foreach (var param in function.FunctionSignature?.Parameters ?? Enumerable.Empty<FunctionParamModel>())
         {
-            if (param.TypeReference?.ReferencedTypeId.HasValue == true)
+            if (param.TypeReference?.ReferencedType != null)
             {
-                referencedTypeIds.Add(param.TypeReference.ReferencedTypeId.Value);
+                referencedTypeNames.Add(param.TypeReference.ReferencedType.StoredFullyQualifiedName);
             }
         }
 
         // Recursively collect base types
         if (options.IncludeBaseTypes)
         {
-            await CollectBaseTypesRecursivelyAsync(referencedTypeIds, ct);
+            await CollectBaseTypesRecursivelyAsync(referencedTypeNames, ct);
         }
 
         // Generate sections
-        if (function.ParentId.HasValue)
+        if (function.ParentType != null)
         {
-            var parentRef = await GenerateStructReferenceAsync(function.ParentId.Value, options, ct);
+            var parentRef =
+                await GenerateStructReferenceAsync(function.ParentType.StoredFullyQualifiedName, options, ct);
             sections.Add($"=== PARENT STRUCT ===\n{parentRef}");
         }
 
-        var paramTypeIds = function.FunctionSignature?.Parameters
-            .Where(p => p.TypeReference?.ReferencedTypeId.HasValue == true)
-            .Select(p => p.TypeReference!.ReferencedTypeId!.Value)
+        var paramTypeNames = function.FunctionSignature?.Parameters
+            .Where(p => p.TypeReference?.ReferencedType != null)
+            .Select(p => p.TypeReference!.ReferencedType!.StoredFullyQualifiedName)
             .Distinct()
-            .Where(id => id != function.ParentId) // Don't duplicate parent
-            .ToList() ?? new List<int>();
+            .Where(name => name != function.ParentType?.StoredFullyQualifiedName) // Don't duplicate parent
+            .ToList() ?? new List<string>();
 
-        if (paramTypeIds.Any())
+        if (paramTypeNames.Any())
         {
             var paramRefs = new List<string>();
-            foreach (var typeId in paramTypeIds)
+            foreach (var name in paramTypeNames)
             {
-                paramRefs.Add(await GenerateTypeReferenceAsync(typeId, options, ct));
+                paramRefs.Add(await GenerateTypeReferenceAsync(name, options, ct));
             }
 
             sections.Add($"=== PARAMETER TYPES ===\n{string.Join("\n\n", paramRefs)}");
         }
 
-        var returnTypeId = function.FunctionSignature?.ReturnTypeReference?.ReferencedTypeId;
-        if (returnTypeId.HasValue && returnTypeId != function.ParentId && !paramTypeIds.Contains(returnTypeId.Value))
+        var returnTypeName = function.FunctionSignature?.ReturnTypeReference?.ReferencedType?.StoredFullyQualifiedName;
+        if (returnTypeName != null && returnTypeName != function.ParentType?.StoredFullyQualifiedName &&
+            !paramTypeNames.Contains(returnTypeName))
         {
-            var returnRef = await GenerateTypeReferenceAsync(returnTypeId.Value, options, ct);
+            var returnRef = await GenerateTypeReferenceAsync(returnTypeName, options, ct);
             sections.Add($"=== RETURN TYPE ===\n{returnRef}");
         }
 
         // Base types (excluding already-shown types)
-        var baseTypeIds = referencedTypeIds
-            .Except(paramTypeIds)
-            .Where(id => id != function.ParentId && id != returnTypeId)
+        var baseTypeNames = referencedTypeNames
+            .Except(paramTypeNames)
+            .Where(name => name != function.ParentType?.StoredFullyQualifiedName && name != returnTypeName)
             .ToList();
 
-        if (baseTypeIds.Any() && options.IncludeBaseTypes)
+        if (baseTypeNames.Any() && options.IncludeBaseTypes)
         {
             var baseRefs = new List<string>();
-            foreach (var typeId in baseTypeIds)
+            foreach (var name in baseTypeNames)
             {
-                baseRefs.Add(await GenerateTypeReferenceAsync(typeId, options, ct));
+                baseRefs.Add(await GenerateTypeReferenceAsync(name, options, ct));
             }
 
             sections.Add($"=== BASE TYPES ===\n{string.Join("\n\n", baseRefs)}");
@@ -128,30 +131,30 @@ public class ReferenceTextGenerator : IReferenceTextGenerator
     }
 
     private async Task<string> GenerateTypeReferenceAsync(
-        int typeId, ReferenceOptions options, CancellationToken ct)
+        string fullyQualifiedName, ReferenceOptions options, CancellationToken ct)
     {
         var type = await _typeDb.Types
-            .FirstOrDefaultAsync(t => t.Id == typeId, ct);
+            .FirstOrDefaultAsync(t => t.StoredFullyQualifiedName == fullyQualifiedName, ct);
 
-        if (type == null) return $"// Type {typeId} not found";
+        if (type == null) return $"// Type {fullyQualifiedName} not found";
 
         return type.Type switch
         {
-            TypeType.Struct or TypeType.Class => await GenerateStructReferenceAsync(typeId, options, ct),
-            TypeType.Enum => await GenerateEnumReferenceAsync(typeId, options, ct),
+            TypeType.Struct or TypeType.Class => await GenerateStructReferenceAsync(fullyQualifiedName, options, ct),
+            TypeType.Enum => await GenerateEnumReferenceAsync(fullyQualifiedName, options, ct),
             _ => $"// {type.FullyQualifiedName} ({type.Type})"
         };
     }
 
     public async Task<string> GenerateStructReferenceAsync(
-        int structId, ReferenceOptions options, CancellationToken ct = default)
+        string fullyQualifiedName, ReferenceOptions options, CancellationToken ct = default)
     {
-        var structType = _repository.GetTypeById(structId);
+        var structType = _repository.GetTypeByFullyQualifiedName(fullyQualifiedName);
 
         if (structType == null)
-            return $"// Struct {structId} not found";
+            return $"// Struct {fullyQualifiedName} not found";
 
-        var header = await GetCommentHeaderAsync(options, EntityType.Struct, structId);
+        var header = await GetCommentHeaderAsync(options, EntityType.Struct, fullyQualifiedName);
 
         if (options.IncludeDefinition)
         {
@@ -160,10 +163,10 @@ public class ReferenceTextGenerator : IReferenceTextGenerator
                 return header + structType.Source;
             }
 
-            // Pre-load members if not already loaded by GetTypeById
+            // Pre-load members if not already loaded by GetTypeByFullyQualifiedName
             if (!structType.StructMembers.Any())
             {
-                structType.StructMembers = _repository.GetStructMembers(structId);
+                structType.StructMembers = _repository.GetStructMembers(structType.Id);
             }
 
             var tokens = _classGenerator.Generate(structType);
@@ -174,15 +177,15 @@ public class ReferenceTextGenerator : IReferenceTextGenerator
     }
 
     public async Task<string> GenerateEnumReferenceAsync(
-        int enumId, ReferenceOptions options, CancellationToken ct = default)
+        string fullyQualifiedName, ReferenceOptions options, CancellationToken ct = default)
     {
-        var enumType = _repository.GetTypeById(enumId);
+        var enumType = _repository.GetTypeByFullyQualifiedName(fullyQualifiedName);
 
         if (enumType == null)
-            return $"// Enum {enumId} not found";
+            return $"// Enum {fullyQualifiedName} not found";
 
         var sb = new StringBuilder();
-        var header = await GetCommentHeaderAsync(options, EntityType.Enum, enumId);
+        var header = await GetCommentHeaderAsync(options, EntityType.Enum, fullyQualifiedName);
         sb.Append(header);
 
         if (options.IncludeDefinition)
@@ -202,7 +205,7 @@ public class ReferenceTextGenerator : IReferenceTextGenerator
         if (options.IncludeReferencingFunctions)
         {
             var members = await _typeDb.EnumMembers
-                .Where(m => m.EnumTypeId == enumId)
+                .Where(m => m.EnumTypeId == enumType.Id)
                 .Select(m => m.Name)
                 .ToListAsync(ct);
 
@@ -247,12 +250,13 @@ public class ReferenceTextGenerator : IReferenceTextGenerator
         return sb.ToString();
     }
 
-    private async Task<string> GetCommentHeaderAsync(ReferenceOptions options, EntityType entityType, int entityId)
+    private async Task<string> GetCommentHeaderAsync(ReferenceOptions options, EntityType entityType,
+        string fullyQualifiedName)
     {
         if (options.IncludeComments && options.CommentsFromStage != null)
         {
             var comment = await _resultRepo.GetSuccessfulResultAsync(
-                options.CommentsFromStage, entityType, entityId);
+                options.CommentsFromStage, entityType, fullyQualifiedName);
 
             if (comment != null)
             {
@@ -276,45 +280,48 @@ public class ReferenceTextGenerator : IReferenceTextGenerator
     }
 
     public async Task<string> GenerateFunctionReferenceAsync(
-        int functionBodyId, ReferenceOptions options, CancellationToken ct = default)
+        string fullyQualifiedName, ReferenceOptions options, CancellationToken ct = default)
     {
         var function = await _typeDb.FunctionBodies
             .Include(f => f.FunctionSignature!)
             .ThenInclude(s => s.Parameters)
             .Include(f => f.ParentType)
-            .FirstOrDefaultAsync(f => f.Id == functionBodyId, ct);
+            .FirstOrDefaultAsync(f => f.FullyQualifiedName == fullyQualifiedName, ct);
 
         if (function == null)
-            return $"// Function {functionBodyId} not found";
+            return $"// Function {fullyQualifiedName} not found";
 
         var sb = new StringBuilder();
 
         // Add comment if available
-        sb.Append(await GetCommentHeaderAsync(options, EntityType.StructMethod, functionBodyId));
+        sb.Append(await GetCommentHeaderAsync(options, EntityType.StructMethod, fullyQualifiedName));
 
         sb.AppendLine(function.BodyText); // Full function source
 
         return sb.ToString();
     }
 
-    private async Task CollectBaseTypesRecursivelyAsync(HashSet<int> typeIds, CancellationToken ct)
+    private async Task CollectBaseTypesRecursivelyAsync(HashSet<string> fullyQualifiedNames, CancellationToken ct)
     {
-        var toProcess = new Queue<int>(typeIds);
+        var toProcess = new Queue<string>(fullyQualifiedNames);
 
         while (toProcess.Count > 0)
         {
-            var typeId = toProcess.Dequeue();
+            var fqn = toProcess.Dequeue();
 
-            var inheritances = await _typeDb.TypeInheritances
-                .Where(i => i.ParentTypeId == typeId && i.RelatedTypeId.HasValue)
-                .Select(i => i.RelatedTypeId!.Value)
-                .ToListAsync(ct);
+            var type = await _typeDb.Types
+                .Include(t => t.BaseTypes)
+                .ThenInclude(i => i.RelatedType)
+                .FirstOrDefaultAsync(t => t.StoredFullyQualifiedName == fqn, ct);
 
-            foreach (var baseTypeId in inheritances)
+            if (type == null) continue;
+
+            foreach (var baseType in type.BaseTypes)
             {
-                if (typeIds.Add(baseTypeId))
+                if (baseType.RelatedType != null &&
+                    fullyQualifiedNames.Add(baseType.RelatedType.StoredFullyQualifiedName))
                 {
-                    toProcess.Enqueue(baseTypeId);
+                    toProcess.Enqueue(baseType.RelatedType.StoredFullyQualifiedName);
                 }
             }
         }

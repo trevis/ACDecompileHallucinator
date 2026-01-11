@@ -45,7 +45,6 @@ public class CommentEnumsStage : StageBase
         return enums.Select(e => new WorkItem
         {
             EntityType = EntityType.Enum,
-            EntityId = e.Id,
             EntityName = e.BaseName,
             FullyQualifiedName = e.StoredFullyQualifiedName
         }).ToList();
@@ -55,12 +54,12 @@ public class CommentEnumsStage : StageBase
         WorkItem item, IReadOnlyList<string> failureHistory, string? previousResponse, CancellationToken ct)
     {
         var enumDefinition = await ReferenceGenerator.GenerateEnumReferenceAsync(
-            item.EntityId,
+            item.FullyQualifiedName,
             new ReferenceOptions { IncludeComments = false, IncludeReferencingFunctions = false },
             ct);
 
         var referencingFunctions = await ReferenceGenerator.GenerateEnumReferenceAsync(
-            item.EntityId,
+            item.FullyQualifiedName,
             new ReferenceOptions
                 { IncludeComments = false, IncludeReferencingFunctions = true, IncludeDefinition = false },
             ct);
@@ -121,12 +120,12 @@ public class CommentEnumsStage : StageBase
         WorkItem item, string generatedContent, CancellationToken ct)
     {
         var enumDefinition = await ReferenceGenerator.GenerateEnumReferenceAsync(
-            item.EntityId,
+            item.FullyQualifiedName,
             new ReferenceOptions { IncludeComments = false, IncludeReferencingFunctions = false },
             ct);
 
         var referencingFunctions = await ReferenceGenerator.GenerateEnumReferenceAsync(
-            item.EntityId,
+            item.FullyQualifiedName,
             new ReferenceOptions
                 { IncludeComments = false, IncludeReferencingFunctions = true, IncludeDefinition = false },
             ct);

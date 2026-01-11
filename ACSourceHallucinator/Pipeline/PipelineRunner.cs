@@ -50,9 +50,9 @@ public class PipelineRunner
             var pendingItems = allItems;
             if (!options.ForceRegeneration)
             {
-                var completedIds = await _resultRepo.GetCompletedEntityIdsAsync(stage.Name);
+                var completedNames = await _resultRepo.GetCompletedEntityNamesAsync(stage.Name);
                 pendingItems = allItems
-                    .Where(item => !completedIds.Contains((item.EntityType, item.EntityId)))
+                    .Where(item => !completedNames.Contains((item.EntityType, item.FullyQualifiedName)))
                     .ToList();
             }
 

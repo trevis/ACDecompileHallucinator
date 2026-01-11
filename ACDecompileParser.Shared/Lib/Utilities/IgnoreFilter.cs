@@ -68,7 +68,8 @@ public static class IgnoreFilter
         "_D3DLIGHT9", "_D3DLIGHTTYPE", "_D3DCOLORVALUE", "_D3DVECTOR", "ICIDM", "ICIDM_vtbl",
         "IResourceNotify", "_WSABUF", "SCARD_T0_COMMAND", "HIDREPORTINFO", "_D3DMATERIAL9",
         "_InstanceID", "_D3DMATRIX", "_D3DDEVTYPE", "_D3DCAPS9", "_D3DRESOURCETYPE",
-        "_D3DPRIMITIVETYPE", "_D3DVSHADERCAPS2_0", "IConsoleCallbackObject"
+        "_D3DPRIMITIVETYPE", "_D3DVSHADERCAPS2_0", "IConsoleCallbackObject", "_LARGE_INTEGER",
+        "_ULARGE_INTEGER"
     };
 
     /// <summary>

@@ -7,7 +7,6 @@ public class StageResult
     public int Id { get; set; }
     public required string StageName { get; set; }
     public required EntityType EntityType { get; set; }
-    public required int EntityId { get; set; }
     public required string FullyQualifiedName { get; set; }
 
     public StageResultStatus Status { get; set; }

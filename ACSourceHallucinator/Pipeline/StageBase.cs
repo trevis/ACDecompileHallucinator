@@ -40,7 +40,6 @@ public abstract class StageBase : IStage
         {
             StageName = Name,
             EntityType = item.EntityType,
-            EntityId = item.EntityId,
             FullyQualifiedName = item.FullyQualifiedName,
             Status = StageResultStatus.Pending,
             IsCacheHit = true, // Assume cached until proven otherwise
@@ -202,7 +201,7 @@ public abstract class StageBase : IStage
 
         if (jsonStart == -1 || jsonEnd == -1 || jsonEnd < jsonStart)
         {
-             return new VerificationResult
+            return new VerificationResult
             {
                 IsValid = false,
                 Reason = "Could not find valid JSON object in response",

@@ -20,7 +20,7 @@ public class HallucinatorDbContext : DbContext
         modelBuilder.Entity<StageResult>(entity =>
         {
             entity.HasKey(e => e.Id);
-            entity.HasIndex(e => new { e.StageName, e.EntityType, e.EntityId }).IsUnique();
+            entity.HasIndex(e => new { e.StageName, e.EntityType, e.FullyQualifiedName }).IsUnique();
             entity.HasIndex(e => e.FullyQualifiedName);
             entity.Property(e => e.GeneratedContent).HasColumnType("TEXT");
             entity.Property(e => e.LastFailureReason).HasColumnType("TEXT");

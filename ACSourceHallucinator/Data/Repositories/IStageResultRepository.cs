@@ -5,8 +5,8 @@ namespace ACSourceHallucinator.Data.Repositories;
 
 public interface IStageResultRepository
 {
-    Task<HashSet<(EntityType, int)>> GetCompletedEntityIdsAsync(string stageName);
+    Task<HashSet<(EntityType, string)>> GetCompletedEntityNamesAsync(string stageName);
     Task SaveResultAsync(StageResult result);
-    Task<StageResult?> GetSuccessfulResultAsync(string stageName, EntityType entityType, int entityId);
-    Task<List<StageResult>> GetResultsWithLogsAsync(EntityType entityType, int entityId);
+    Task<StageResult?> GetSuccessfulResultAsync(string stageName, EntityType entityType, string fullyQualifiedName);
+    Task<List<StageResult>> GetResultsWithLogsAsync(EntityType entityType, string fullyQualifiedName);
 }

@@ -6,32 +6,22 @@ public interface IReferenceTextGenerator
     /// Generates formatted reference text for a struct, including members and base types.
     /// </summary>
     Task<string> GenerateStructReferenceAsync(
-        int structId,
+        string fullyQualifiedName,
         ReferenceOptions options,
         CancellationToken ct = default);
 
-    /// <summary>
-    /// Generates formatted reference text for an enum, including members.
-    /// </summary>
     Task<string> GenerateEnumReferenceAsync(
-        int enumId,
+        string fullyQualifiedName,
         ReferenceOptions options,
         CancellationToken ct = default);
 
-    /// <summary>
-    /// Generates formatted reference text for a function signature.
-    /// </summary>
     Task<string> GenerateFunctionReferenceAsync(
-        int functionBodyId,
+        string fullyQualifiedName,
         ReferenceOptions options,
         CancellationToken ct = default);
 
-    /// <summary>
-    /// Collects all referenced types from a function signature (params, return type)
-    /// and generates their reference text.
-    /// </summary>
     Task<string> GenerateReferencesForFunctionAsync(
-        int functionBodyId,
+        string fullyQualifiedName,
         ReferenceOptions options,
         CancellationToken ct = default);
 }

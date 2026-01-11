@@ -199,18 +199,18 @@ public class TypeGroupProcessor
         {
             if (type.Type == TypeType.Enum)
             {
-                type.XmlDocComment = await commentProvider.GetEnumCommentAsync(type.Id);
+                type.XmlDocComment = await commentProvider.GetEnumCommentAsync(type.StoredFullyQualifiedName);
             }
             else
             {
-                type.XmlDocComment = await commentProvider.GetStructCommentAsync(type.Id);
+                type.XmlDocComment = await commentProvider.GetStructCommentAsync(type.StoredFullyQualifiedName);
             }
 
             if (type.FunctionBodies != null)
             {
                 foreach (var fb in type.FunctionBodies)
                 {
-                    fb.XmlDocComment = await commentProvider.GetMethodCommentAsync(fb.Id);
+                    fb.XmlDocComment = await commentProvider.GetMethodCommentAsync(fb.FullyQualifiedName);
                 }
             }
 

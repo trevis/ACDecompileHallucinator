@@ -43,9 +43,9 @@ public class CSharpGroupProcessor
             {
                 CollectNestedTypes(type, allTypes);
             }
-            
+
             var allTypeIds = allTypes.Select(t => t.Id).Distinct().ToList();
-            
+
             var allBaseTypes = _repository.GetBaseTypesForMultipleTypes(allTypeIds);
             var allMembers = _repository.GetStructMembersForMultipleTypes(allTypeIds);
             var allBodies = _repository.GetFunctionBodiesForMultipleTypes(allTypeIds);
@@ -165,18 +165,18 @@ public class CSharpGroupProcessor
         {
             if (type.Type == TypeType.Enum)
             {
-                type.XmlDocComment = await commentProvider.GetEnumCommentAsync(type.Id);
+                type.XmlDocComment = await commentProvider.GetEnumCommentAsync(type.StoredFullyQualifiedName);
             }
             else
             {
-                type.XmlDocComment = await commentProvider.GetStructCommentAsync(type.Id);
+                type.XmlDocComment = await commentProvider.GetStructCommentAsync(type.StoredFullyQualifiedName);
             }
 
             if (type.FunctionBodies != null)
             {
                 foreach (var fb in type.FunctionBodies)
                 {
-                    fb.XmlDocComment = await commentProvider.GetMethodCommentAsync(fb.Id);
+                    fb.XmlDocComment = await commentProvider.GetMethodCommentAsync(fb.FullyQualifiedName);
                 }
             }
 

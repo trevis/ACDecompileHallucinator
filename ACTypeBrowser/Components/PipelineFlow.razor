@@ -298,16 +298,12 @@
         {
             if (entity is TypeModel type)
             {
-                // Fetch valid stage results for the struct/enum
-                // Note: Assuming EntityType based on TypeModel.
-                // Assuming TypeModel represents Struct or Enum
                 var entityType = type.Type == TypeType.Enum ? EntityType.Enum : EntityType.Struct;
-                _selectedResults = await ResultRepository.GetResultsWithLogsAsync(entityType, type.Id);
+                _selectedResults = await ResultRepository.GetResultsWithLogsAsync(entityType, type.StoredFullyQualifiedName);
             }
             else if (entity is FunctionBodyModel func)
             {
-                // Assuming FunctionBodyModel maps to StructMethod
-                _selectedResults = await ResultRepository.GetResultsWithLogsAsync(EntityType.StructMethod, func.Id);
+                _selectedResults = await ResultRepository.GetResultsWithLogsAsync(EntityType.StructMethod, func.FullyQualifiedName);
             }
         }
         catch (Exception ex)

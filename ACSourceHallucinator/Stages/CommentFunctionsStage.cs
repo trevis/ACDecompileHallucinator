@@ -47,7 +47,6 @@ public class CommentFunctionsStage : StageBase
         return functions.Select(f => new WorkItem
         {
             EntityType = EntityType.StructMethod,
-            EntityId = f.Id,
             EntityName = f.FunctionSignature?.Name ?? "Unknown",
             FullyQualifiedName = f.FunctionSignature?.FullyQualifiedName ?? f.FullyQualifiedName,
             Metadata = new Dictionary<string, object>
@@ -62,10 +61,10 @@ public class CommentFunctionsStage : StageBase
     {
         var function = await _typeDb.FunctionBodies
             .Include(f => f.FunctionSignature)
-            .FirstAsync(f => f.Id == item.EntityId, ct);
+            .FirstAsync(f => f.FullyQualifiedName == item.FullyQualifiedName, ct);
 
         var references = await ReferenceGenerator.GenerateReferencesForFunctionAsync(
-            item.EntityId,
+            item.FullyQualifiedName,
             new ReferenceOptions { IncludeComments = false },
             ct);
 
@@ -131,10 +130,10 @@ public class CommentFunctionsStage : StageBase
     {
         var function = await _typeDb.FunctionBodies
             .Include(f => f.FunctionSignature)
-            .FirstAsync(f => f.Id == item.EntityId, ct);
+            .FirstAsync(f => f.FullyQualifiedName == item.FullyQualifiedName, ct);
 
         var references = await ReferenceGenerator.GenerateReferencesForFunctionAsync(
-            item.EntityId,
+            item.FullyQualifiedName,
             new ReferenceOptions { IncludeComments = false },
             ct);
 

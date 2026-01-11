@@ -106,8 +106,9 @@ public static class PrimitiveTypeMappings
         { "LPCSTR", "sbyte*" },
         { "_iobuf", "byte" },
         { "_IDClass", "uint" },
-        { "_D3DPSHADERCAPS2_0", "_D3DVSHADERCAPS2_0" }
-
+        { "_D3DPSHADERCAPS2_0", "_D3DVSHADERCAPS2_0" },
+        { "_POINTL", "int*" },
+        { "LPVOID", "System.IntPtr" }
     };
 
     /// <summary>
@@ -229,7 +230,8 @@ public static class PrimitiveTypeMappings
             baseType.Equals("_STL::vector", StringComparison.OrdinalIgnoreCase))
         {
             return "long";
-        }// Check for generics
+        } // Check for generics
+
         int openBracket = baseType.IndexOf('<');
         if (openBracket != -1)
         {
