@@ -15,11 +15,10 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
 // Database
-var dbPath = Path.GetFullPath(Environment.GetEnvironmentVariable("ACTYPEBROWSER_DB_PATH") ??
-                              "/projects/ACDecompileHallucinator/out/types.db");
-var connectionString = string.IsNullOrEmpty(dbPath)
-    ? builder.Configuration.GetConnectionString("DefaultConnection")
-    : $"Data Source={dbPath}";
+var dbPath =
+    ACSourceHallucinator.Configuration.DatabasePaths.GetTypesDbPath(
+        Environment.GetEnvironmentVariable("ACTYPEBROWSER_DB_PATH"));
+var connectionString = $"Data Source={dbPath}";
 
 if (!File.Exists(dbPath))
 {
@@ -30,8 +29,9 @@ builder.Services.AddDbContext<TypeContext>(options =>
     options.UseSqlite(connectionString));
 
 // Hallucinator DB
-var hallucinatorDbPath = Path.GetFullPath(Environment.GetEnvironmentVariable("HALLUCINATOR_DB_PATH") ??
-                                          "/projects/ACDecompileHallucinator/out/hallucinator.db");
+var hallucinatorDbPath =
+    ACSourceHallucinator.Configuration.DatabasePaths.GetHallucinatorDbPath(
+        Environment.GetEnvironmentVariable("HALLUCINATOR_DB_PATH"));
 string hallucinatorConnectionString = $"Data Source={hallucinatorDbPath}";
 
 if (!File.Exists(hallucinatorDbPath))
@@ -44,8 +44,8 @@ builder.Services.AddDbContext<ACSourceHallucinator.Data.HallucinatorDbContext>(o
 
 // Repositories and Services
 builder.Services
-    .AddScoped<ACSourceHallucinator.Data.Repositories.IStageResultRepository,
-        ACSourceHallucinator.Data.Repositories.StageResultRepository>();
+    .AddScoped<IStageResultRepository,
+        StageResultRepository>();
 builder.Services.AddScoped<ICommentProvider, HallucinatorCommentProvider>();
 builder.Services.AddScoped<SqlTypeRepository>();
 builder.Services.AddSingleton<ITypeRepository, InMemoryTypeRepository>();

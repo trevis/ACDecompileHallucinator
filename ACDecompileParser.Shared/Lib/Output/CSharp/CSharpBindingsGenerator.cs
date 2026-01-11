@@ -225,7 +225,6 @@ public class CSharpBindingsGenerator
         // Struct declaration
         string safeBaseName = GetGeneratedTypeName(type, parentType);
         AppendXmlDocComment(sb, type.XmlDocComment, indent);
-        sb.AppendLine($"{indent}// {type.FullyQualifiedName}");
         sb.AppendLine($"{indent}public unsafe struct {safeBaseName}{interfaces}");
         sb.AppendLine($"{indent}{{");
 

@@ -8,7 +8,6 @@ public class HallucinatorDbContext : DbContext
 {
     public DbSet<StageResult> StageResults { get; set; }
     public DbSet<LlmRequestLog> LlmRequestLogs { get; set; }
-    public DbSet<LlmCacheEntry> LlmCacheEntries { get; set; }
 
     public HallucinatorDbContext(DbContextOptions<HallucinatorDbContext> options)
         : base(options)
@@ -28,13 +27,6 @@ public class HallucinatorDbContext : DbContext
             entity.Property(e => e.Status).HasConversion<string>();
         });
 
-        modelBuilder.Entity<LlmCacheEntry>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.HasIndex(e => e.CacheKey).IsUnique();
-            entity.Property(e => e.PromptText).HasColumnType("TEXT");
-            entity.Property(e => e.ResponseContent).HasColumnType("TEXT");
-        });
 
         modelBuilder.Entity<LlmRequestLog>(entity =>
         {

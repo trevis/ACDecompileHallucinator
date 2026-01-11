@@ -25,14 +25,12 @@ public static class Program
     {
         var rootCommand = new RootCommand("ACSourceHallucinator - LLM-powered decompiled code enhancement");
 
-        var sourceDbOption = new Option<string>(
-                "--source-db",
-                "Path to the source type database")
-        { IsRequired = true };
+        var sourceDbOption = new Option<string?>(
+            "--source-db",
+            "Path to the source type database");
 
-        var hallucinatorDbOption = new Option<string>(
+        var hallucinatorDbOption = new Option<string?>(
             "--hallucinator-db",
-            () => "hallucinator.db",
             "Path to the hallucinator results database");
 
         var llmUrlOption = new Option<string>(
@@ -43,7 +41,7 @@ public static class Program
         var modelOption = new Option<string>(
                 "--model",
                 "LLM model name")
-        { IsRequired = true };
+            { IsRequired = true };
 
         var maxTokensOption = new Option<int>(
             "--max-tokens",
@@ -93,8 +91,9 @@ public static class Program
         {
             var options = new CliOptions
             {
-                SourceDbPath = context.ParseResult.GetValueForOption(sourceDbOption)!,
-                HallucinatorDbPath = context.ParseResult.GetValueForOption(hallucinatorDbOption)!,
+                SourceDbPath = DatabasePaths.GetTypesDbPath(context.ParseResult.GetValueForOption(sourceDbOption)),
+                HallucinatorDbPath =
+                    DatabasePaths.GetHallucinatorDbPath(context.ParseResult.GetValueForOption(hallucinatorDbOption)),
                 LlmBaseUrl = context.ParseResult.GetValueForOption(llmUrlOption)!,
                 LlmModel = context.ParseResult.GetValueForOption(modelOption)!,
                 MaxTokens = context.ParseResult.GetValueForOption(maxTokensOption),
@@ -116,11 +115,14 @@ public static class Program
     {
         var services = ConfigureServices(options);
 
-        // Ensure hallucinator database is created
+        // Ensure databases are created
         using (var scope = services.CreateScope())
         {
             var hallucinatorDb = scope.ServiceProvider.GetRequiredService<HallucinatorDbContext>();
             await hallucinatorDb.Database.EnsureCreatedAsync(ct);
+
+            var cacheDb = scope.ServiceProvider.GetRequiredService<LlmCacheDbContext>();
+            await cacheDb.Database.EnsureCreatedAsync(ct);
         }
 
         using var scope2 = services.CreateScope();
@@ -157,6 +159,9 @@ public static class Program
 
         services.AddDbContext<HallucinatorDbContext>(opt =>
             opt.UseSqlite($"Data Source={options.HallucinatorDbPath}"));
+
+        services.AddDbContext<LlmCacheDbContext>(opt =>
+            opt.UseSqlite($"Data Source={DatabasePaths.GetLlmCacheDbPath()}"));
 
         // LLM client options
         services.Configure<LlmClientOptions>(opt =>

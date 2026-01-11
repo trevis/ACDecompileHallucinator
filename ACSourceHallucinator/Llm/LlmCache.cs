@@ -10,22 +10,22 @@ namespace ACSourceHallucinator.Llm;
 
 public class LlmCache : ILlmCache
 {
-    private readonly HallucinatorDbContext _db;
-    
-    public LlmCache(HallucinatorDbContext db)
+    private readonly LlmCacheDbContext _db;
+
+    public LlmCache(LlmCacheDbContext db)
     {
         _db = db;
     }
-    
+
     public async Task<LlmResponse?> GetAsync(LlmRequest request)
     {
         var cacheKey = ComputeCacheKey(request);
-        
+
         var entry = await _db.LlmCacheEntries
             .FirstOrDefaultAsync(e => e.CacheKey == cacheKey);
-        
+
         if (entry == null) return null;
-        
+
         return new LlmResponse
         {
             Content = entry.ResponseContent,
@@ -35,11 +35,11 @@ public class LlmCache : ILlmCache
             FromCache = true
         };
     }
-    
+
     public async Task SetAsync(LlmRequest request, LlmResponse response)
     {
         var cacheKey = ComputeCacheKey(request);
-        
+
         var entry = new LlmCacheEntry
         {
             CacheKey = cacheKey,
@@ -52,11 +52,11 @@ public class LlmCache : ILlmCache
             ResponseTimeMs = (int)response.ResponseTime.TotalMilliseconds,
             CreatedAt = DateTime.UtcNow
         };
-        
+
         _db.LlmCacheEntries.Add(entry);
         await _db.SaveChangesAsync();
     }
-    
+
     private static string ComputeCacheKey(LlmRequest request)
     {
         var input = $"{request.Model}|{request.Temperature}|{request.Prompt}";

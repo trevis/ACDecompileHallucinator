@@ -37,7 +37,8 @@ ACSourceHallucinator/
 ├── appsettings.json
 │
 ├── Configuration/
-│   └── CliOptions.cs
+│   ├── CliOptions.cs
+│   └── DatabasePaths.cs              # Unified database path resolution
 │
 ├── Models/
 │   ├── WorkItem.cs
@@ -59,7 +60,8 @@ ACSourceHallucinator/
 │   └── IReferenceTextGenerator.cs
 │
 ├── Data/
-│   ├── HallucinatorDbContext.cs      # Stage results + LLM cache tables
+│   ├── HallucinatorDbContext.cs      # Stage results tables
+│   ├── LlmCacheDbContext.cs          # LLM cache database context
 │   ├── Entities/
 │   │   └── LlmCacheEntry.cs
 │   ├── Repositories/
@@ -763,9 +765,9 @@ namespace ACSourceHallucinator.Llm;
 
 public class LlmCache : ILlmCache
 {
-    private readonly HallucinatorDbContext _db;
+    private readonly LlmCacheDbContext _db;
     
-    public LlmCache(HallucinatorDbContext db)
+    public LlmCache(LlmCacheDbContext db)
     {
         _db = db;
     }
