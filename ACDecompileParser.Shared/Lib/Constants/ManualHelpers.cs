@@ -17,6 +17,12 @@ public static class ManualHelpers
 
                           using HRESULT = int;
                           """,
+        ["AC1Legacy::PSRefBufferCharData"] = """
+                          namespace ACBindings.Internal.AC1Legacy;
+                          public unsafe struct PSRefBufferCharData<T> where T : unmanaged {
+                              public fixed Int32 m_data[256];
+                          }
+                          """,
         ["Ptr"] = """
                   namespace ACBindings.Internal;
 

@@ -25,13 +25,19 @@ The solution consists of three main components:
 1.  **ACDecompileParser.Shared**: The core library containing the domain model, database logic (SQLite + EF Core), and shared services.
 2.  **ACDecompileParser**: A CLI console application that parses raw headers and populates the database.
 3.  **ACTypeBrowser**: A Blazor Server web application for searching and browsing the parsed types.
+4.  **ACSourceHallucinator**: A CLI tool for enriching the parsed code with LLM-generated comments and cleanups.
  
 ```mermaid
 graph TD
     Input[Decompiled Headers] -->|Read| Parser[ACDecompileParser]
     Parser -->|Parse & Resolve| DB[(SQLite DB)]
-    DB -->|Read| Browser[ACTypeBrowser]
+    Browser -->|Read| Browser[ACTypeBrowser]
     
+    DB -->|Read| Hallucinator[ACSourceHallucinator]
+    Hallucinator -->|Write| HallucinatorDB[(Hallucinator DB)]
+    Hallucinator <-->|Request/Response| LLM[Local LLM]
+    HallucinatorDB -.->|Read| Browser
+
     subgraph SharedLib [Shared Library]
         Models
         Services[TypeResolution / Hierarchy]
@@ -41,6 +47,7 @@ graph TD
     Parser -.-> Services
     Browser -.-> Models
     Browser -.-> Services
+    Hallucinator -.-> Models
 ```
 
 ## ACDecompileParser (CLI)
@@ -93,6 +100,22 @@ The app will be available at `http://localhost:5000` (or the port defined in `co
 ### Configuration
 
 *   **ACTYPEBROWSER_DB_PATH**: Environment variable to specify the location of the SQLite database within the container (default: `/data/types.db`).
+
+## ACSourceHallucinator (LLM CLI)
+
+A separate CLI tool that "hallucinates" (generates) documentation and performs code cleanup using a local LLM.
+
+### Usage
+
+```bash
+dotnet run --project ACSourceHallucinator -- \
+  --source-db out/types.db \
+  --hallucinator-db out/hallucinator.db \
+  --model "gpt-4-turbo" \
+  --max-tokens 4096
+```
+
+It creates a `hallucinator.db` containing the generated comments and an `llmcache.db` to cache LLM responses.
 
 ## Database Schema
 

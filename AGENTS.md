@@ -9,6 +9,7 @@ The solution is divided into three main projects:
 1.  **ACDecompileParser.Shared**: The core library containing the domain model, database logic, and shared services.
 2.  **ACDecompileParser**: A console application responsible for parsing raw C++ header files and populating the database.
 3.  **ACTypeBrowser**: A Blazor Server web application for interactively browsing the parsed type hierarchy.
+4.  **ACSourceHallucinator**: A console application that uses LLMs to enrich the database with comments and cleanups.
 
 ## 1. ACDecompileParser.Shared
 *Location: `/ACDecompileParser.Shared`*
@@ -75,6 +76,19 @@ The "Visualization Layer". It connects to the SQLite database to provide a rich 
 
 ---
 
+## 4. ACSourceHallucinator
+*Location: `/ACSourceHallucinator`*
+*Type: Console Application*
+
+The "Enrichment Layer". It reads the types database, sends prompts to a local LLM (via OpenAI-compatible API), and writes enriched data (comments, cleaned bodies) back to a separate `hallucinator.db`, while caching LLM responses in `llmcache.db`.
+
+### Pipeline System
+-   **Orchestrator**: Manages a pipeline of stages (e.g., `CommentStructs`, `CommentEnums`).
+-   **Stages**: Each stage processes a specific entity type, ensuring dependencies are met.
+-   **LLM Client**: Handles communication with the LLM, including caching and retries.
+
+---
+
 ## Cross-Cutting Systems
 
 ### Type Resolution Flow
@@ -96,6 +110,11 @@ graph TD
     DB -->|Read| Exporter[FileOutputGenerator]
     Exporter -->|Write| Output[Clean Headers]
     
+    DB -->|Read| Hallucinator[ACSourceHallucinator]
+    Hallucinator -->|Write| HallucinatorDB[(Hallucinator DB)]
+    Hallucinator <-->|Request/Response| LLM[Local LLM]
+    HallucinatorDB -.->|Read| Browser
+
     subgraph Shared Library
     Models
     Services[TypeResolution / Hierarchy]
@@ -103,4 +122,5 @@ graph TD
     
     Parser -.-> Shared Library
     Browser -.-> Shared Library
+    Hallucinator -.-> Shared Library
 ```

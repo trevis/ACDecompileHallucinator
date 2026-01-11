@@ -177,6 +177,17 @@ public class CSharpFileOutputGenerator
             // Create the file path
             string csPath = Path.Combine(dirPath, $"{fileName}.cs");
 
+            // Check if we have a manual helper for this type
+            if (ACDecompileParser.Shared.Lib.Constants.ManualHelpers.Helpers.TryGetValue(rawName,
+                    out var manualContent))
+            {
+                // Write manual content
+                File.WriteAllText(csPath, manualContent);
+                processedCount++;
+                reporter?.Report(processedCount);
+                continue;
+            }
+
             // Generate C# content using CSharpGroupProcessor
             sw.Restart();
             var groupProcessor = new CSharpGroupProcessor(_repository, lookupCache);

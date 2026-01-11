@@ -746,6 +746,8 @@ internal record OpenAiUsage
 
 ## 6. Caching Layer
 
+The caching layer uses a dedicated SQLite database (`llmcache.db`) to store raw LLM responses, keyed by a hash of the prompt and model parameters. This separates the potentially large cache data from the pipeline results in `hallucinator.db`.
+
 ### 6.1 Cache Interface (Interfaces/ILlmCache.cs)
 
 ```csharp
