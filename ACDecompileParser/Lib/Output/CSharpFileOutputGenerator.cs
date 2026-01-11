@@ -30,7 +30,38 @@ public class CSharpFileOutputGenerator
 
         // Filter out ignored types
         var filteredTypeModels = typeModels.Where(t => !t.IsIgnored).ToList();
-        Console.WriteLine($"[Profiling] Filtered types: {sw.ElapsedMilliseconds}ms");
+
+        // Inject synthetic types for ManualHelpers that define a namespace (contain "::")
+        // but don't exist in the input models. This allow us to output them to the correct
+        // folder structure (e.g. lib/AC1Legacy/PSRefBufferCharData.cs) instead of Manual/.
+        var existingKeys = new HashSet<string>(filteredTypeModels.Select(t =>
+            !string.IsNullOrEmpty(t.Namespace) ? $"{t.Namespace}::{t.BaseName}" : t.BaseName));
+
+        int syntheticIdCounter = -1;
+        foreach (var key in ACDecompileParser.Shared.Lib.Constants.ManualHelpers.Helpers.Keys)
+        {
+            if (key.Contains("::") && !existingKeys.Contains(key))
+            {
+                var parts = key.Split(new[] { "::" }, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length == 2)
+                {
+                    var ns = parts[0];
+                    var baseName = parts[1];
+
+                    filteredTypeModels.Add(new TypeModel
+                    {
+                        Id = syntheticIdCounter--,
+                        Namespace = ns,
+                        BaseName = baseName,
+                        Type = TypeType.Class, // Default to class
+                        Source = $"// Synthetic type for manual helper: {key}"
+                    });
+                }
+            }
+        }
+
+        Console.WriteLine(
+            $"[Profiling] Filtered types (incl. synthetic): {filteredTypeModels.Count} items, {sw.ElapsedMilliseconds}ms");
         sw.Restart();
 
         // Ensure output directory exists
@@ -43,9 +74,7 @@ public class CSharpFileOutputGenerator
         Console.WriteLine($"[Profiling] Directory setup: {sw.ElapsedMilliseconds}ms");
         sw.Restart();
 
-        // Write manual helper files to Manual/ subdirectory
-        WriteManualHelpers(outputDir);
-        Console.WriteLine($"[Profiling] Manual helpers: {sw.ElapsedMilliseconds}ms");
+
         sw.Restart();
 
         // Create lookup cache
@@ -154,6 +183,9 @@ public class CSharpFileOutputGenerator
         long totalGenerateMs = 0;
         long totalWriteMs = 0;
 
+        // Track matched manual keys to avoid duplicating them in Manual/ folder
+        var usedManualKeys = new HashSet<string>();
+
         // Process each group to create C# files
         foreach (var group in groupedTypes)
         {
@@ -174,14 +206,64 @@ public class CSharpFileOutputGenerator
 
             string fileName = ACDecompileParser.Shared.Lib.Constants.PrimitiveTypeMappings.CleanTypeName(rawName);
 
-            // Create the file path
+            // Construct keys to check for manual override
+            // Priority:
+            // 1. Namespace::BaseName (most specific, e.g. "AC1Legacy::PStringBase")
+            // 2. Full outputFileName (e.g. "AC1Legacy::PStringBase" if that's how it was grouped)
+            // 3. Raw name (e.g. "PStringBase")
+
+            string? manualContent = null;
+            string matchedKey = null;
+
+            // Check Namespace::BaseName first
+            if (types.Any())
+            {
+                var firstType = types.First();
+                if (!string.IsNullOrEmpty(firstType.Namespace))
+                {
+                    string nsKey = $"{firstType.Namespace}::{firstType.BaseName}";
+                    if (ACDecompileParser.Shared.Lib.Constants.ManualHelpers.Helpers.TryGetValue(nsKey,
+                            out manualContent))
+                    {
+                        matchedKey = nsKey;
+                    }
+                }
+            }
+
+            if (manualContent == null)
+            {
+                if (ACDecompileParser.Shared.Lib.Constants.ManualHelpers.Helpers.TryGetValue(outputFileName,
+                        out manualContent))
+                {
+                    // Strict Namespace Check:
+                    // If the type has a namespace, but the matched key is global (no "::"),
+                    // we should IGNORE the match. This prevents "PStringBase" from overriding "AC1Legacy::PStringBase".
+
+                    bool typeHasNamespace = types.Any() && !string.IsNullOrEmpty(types.First().Namespace);
+                    bool keyHasNamespace = outputFileName.Contains("::");
+
+                    if (typeHasNamespace && !keyHasNamespace)
+                    {
+                        manualContent = null;
+                    }
+                    else
+                    {
+                        matchedKey = outputFileName;
+                    }
+                }
+            }
+
+            // Create the file path for the file - Use the STANDARD generated path
+            // This ensures "AC1Legacy::PStringBase" overrides "lib/AC1Legacy/PStringBase.cs"
+            // instead of creating a new file.
             string csPath = Path.Combine(dirPath, $"{fileName}.cs");
 
-            // Check if we have a manual helper for this type
-            if (ACDecompileParser.Shared.Lib.Constants.ManualHelpers.Helpers.TryGetValue(rawName,
-                    out var manualContent))
+            if (manualContent != null && matchedKey != null)
             {
-                // Write manual content
+                // Mark this key as used so we don't dump it into Manual/ folder
+                usedManualKeys.Add(matchedKey);
+
+                // Write manual content to the standard location
                 File.WriteAllText(csPath, manualContent);
                 processedCount++;
                 reporter?.Report(processedCount);
@@ -205,21 +287,31 @@ public class CSharpFileOutputGenerator
 
         reporter?.Finish();
 
+        // Write manual helper files to Manual/ subdirectory (excluding ones we already used)
+        WriteManualHelpers(outputDir, usedManualKeys);
+        Console.WriteLine($"[Profiling] Manual helpers: {sw.ElapsedMilliseconds}ms");
+
         Console.WriteLine(
-            $"[Profiling] Content generation total: {totalGenerateMs}ms (avg: {totalGenerateMs / groupedTypes.Count}ms per file)");
+            $"[Profiling] Content generation total: {totalGenerateMs}ms (avg: {totalGenerateMs / groupedTypes.Count}ms per file)"
+        );
         Console.WriteLine(
             $"[Profiling] File I/O total: {totalWriteMs}ms (avg: {totalWriteMs / groupedTypes.Count}ms per file)");
         Console.WriteLine($"[Profiling] Total files generated: {processedCount}");
     }
 
-    private static void WriteManualHelpers(string outputDir)
+    private static void WriteManualHelpers(string outputDir, HashSet<string> excludedKeys)
     {
         string manualDir = Path.Combine(outputDir, "Manual");
         Directory.CreateDirectory(manualDir);
 
         foreach (var (className, content) in ACDecompileParser.Shared.Lib.Constants.ManualHelpers.Helpers)
         {
-            string filePath = Path.Combine(manualDir, $"{className}.cs");
+            if (excludedKeys.Contains(className))
+                continue;
+
+            // Replace :: with __ in filenames
+            string fileName = className.Replace("::", "__");
+            string filePath = Path.Combine(manualDir, $"{fileName}.cs");
             File.WriteAllText(filePath, content);
         }
     }

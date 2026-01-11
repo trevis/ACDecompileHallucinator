@@ -30,7 +30,8 @@ public class CSharpFileOutputGeneratorTests : IDisposable
     public async Task GenerateCSharpFiles_UsesManualHelperContent_WhenMatchFound()
     {
         // Arrange
-        string testKey = "TestInternalType";
+        // We use a namespaced key to ensure it matches the namespaced type under strict rules
+        string testKey = "ACBindings::TestInternalType";
         string manualContent = """
                                namespace ACBindings.Manual;
                                public class TestInternalType { // Manual implementation }
@@ -45,7 +46,7 @@ public class CSharpFileOutputGeneratorTests : IDisposable
             {
                 new TypeModel
                 {
-                    BaseName = testKey,
+                    BaseName = "TestInternalType",
                     Namespace = "ACBindings",
                     Type = TypeType.Class,
                     Source = "class TestInternalType { // Auto-generated }"
@@ -56,7 +57,7 @@ public class CSharpFileOutputGeneratorTests : IDisposable
             await _generator.GenerateCSharpFiles(typeModels, _tempDir);
 
             // Assert
-            string expectedFilePath = Path.Combine(_tempDir, "ACBindings", $"{testKey}.cs");
+            string expectedFilePath = Path.Combine(_tempDir, "ACBindings", "TestInternalType.cs");
             Assert.True(File.Exists(expectedFilePath), $"Expected file {expectedFilePath} not found.");
 
             string actualContent = await File.ReadAllTextAsync(expectedFilePath);
@@ -95,5 +96,145 @@ public class CSharpFileOutputGeneratorTests : IDisposable
         string actualContent = await File.ReadAllTextAsync(expectedFilePath);
         Assert.DoesNotContain("// Manual implementation", actualContent);
         Assert.Contains(testKey, actualContent); // Just check that the type name is present in the file
+    }
+
+    [Fact]
+    public async Task GenerateCSharpFiles_HandlesNamespaceReplacements_ForManualOverrides()
+    {
+        // Arrange
+        string testKey = "AC1Legacy::PStringBase";
+        string manualContent = """
+                               namespace AC1Legacy;
+                               public class PStringBase { // Manual implementation for namespaced type }
+                               """;
+
+        // Inject manual helper
+        ManualHelpers.Helpers[testKey] = manualContent;
+
+        try
+        {
+            // Note: We need to ensure the TypeModel matches the new logic.
+            // GenerateCSharpFiles now checks "Namespace::BaseName"
+            var typeModels = new List<TypeModel>
+            {
+                new TypeModel
+                {
+                    BaseName = "PStringBase", // Standard basename
+                    Namespace = "AC1Legacy", // Standard namespace
+                    Type = TypeType.Class,
+                    Source = "class AC1Legacy::PStringBase { // Auto-generated }"
+                }
+            };
+
+            // Act
+            await _generator.GenerateCSharpFiles(typeModels, _tempDir);
+
+            // Assert
+            // Expected filename: AC1Legacy/PStringBase.cs (Standard auto-generated path)
+            // The logic should use the standard path even for overrides to replace the file.
+            string expectedFileName = "PStringBase.cs";
+            string expectedFilePath = Path.Combine(_tempDir, "AC1Legacy", expectedFileName);
+
+            Assert.True(File.Exists(expectedFilePath), $"Expected file {expectedFilePath} not found.");
+
+            string actualContent = await File.ReadAllTextAsync(expectedFilePath);
+            Assert.Equal(manualContent, actualContent);
+
+            // Also assert that the file was NOT written to Manual/ folder
+            // because it was used as an override.
+            string manualFilePath = Path.Combine(_tempDir, "Manual", "AC1Legacy__PStringBase.cs");
+            Assert.False(File.Exists(manualFilePath), $"File should NOT exist in Manual folder: {manualFilePath}");
+        }
+        finally
+        {
+            // Cleanup injected helper
+            ManualHelpers.Helpers.Remove(testKey);
+        }
+    }
+
+    [Fact]
+    public async Task GenerateCSharpFiles_CreatesStructuredFile_ForManualOnlyType()
+    {
+        // Arrange
+        // This key represents a type that is NOT in the input typeModels (i.e. not in the source code),
+        // but we want it to be generated as if it were, so it gets the proper folder structure.
+        string testKey = "AC1Legacy::PSRefBufferCharData";
+        string manualContent = """
+                               namespace AC1Legacy;
+                               public class PSRefBufferCharData { // Manual only type }
+                               """;
+
+        ManualHelpers.Helpers[testKey] = manualContent;
+
+        try
+        {
+            // Pass EMPTY type models list
+            var typeModels = new List<TypeModel>();
+
+            // Act
+            await _generator.GenerateCSharpFiles(typeModels, _tempDir);
+
+            // Assert
+            // It should have created a synthetic type model internally and routed it through the hierarchy service.
+            // Expected path: AC1Legacy/PSRefBufferCharData.cs
+
+            string expectedFileName = "PSRefBufferCharData.cs";
+            string expectedFilePath = Path.Combine(_tempDir, "AC1Legacy", expectedFileName);
+
+            Assert.True(File.Exists(expectedFilePath),
+                $"Expected file {expectedFilePath} not found. Synthetic type injection failed.");
+
+            string actualContent = await File.ReadAllTextAsync(expectedFilePath);
+            Assert.Equal(manualContent, actualContent);
+
+            // Verify it is NOT in the Manual folder
+            string manualFilePath = Path.Combine(_tempDir, "Manual", "AC1Legacy__PSRefBufferCharData.cs");
+            Assert.False(File.Exists(manualFilePath), $"File should NOT exist in Manual folder: {manualFilePath}");
+        }
+        finally
+        {
+            ManualHelpers.Helpers.Remove(testKey);
+        }
+    }
+
+    [Fact]
+    public async Task GenerateCSharpFiles_DoesNotOverrideNamespacedType_WithGlobalKey()
+    {
+        // Arrange
+        // We have a manual helper for "PStringBase" (no namespace)
+        string globalKey = "PStringBase";
+        string manualContent = "public class PStringBase { // Global Manual }";
+        ManualHelpers.Helpers[globalKey] = manualContent;
+
+        try
+        {
+            // We are generating "AC1Legacy::PStringBase"
+            var typeModels = new List<TypeModel>
+            {
+                new TypeModel
+                {
+                    BaseName = "PStringBase",
+                    Namespace = "AC1Legacy",
+                    Type = TypeType.Class,
+                    Source = "class AC1Legacy::PStringBase { // Auto-generated }" // Should NOT match globalKey
+                }
+            };
+
+            // Act
+            await _generator.GenerateCSharpFiles(typeModels, _tempDir);
+
+            // Assert
+            string expectedFilePath = Path.Combine(_tempDir, "AC1Legacy", "PStringBase.cs");
+            Assert.True(File.Exists(expectedFilePath));
+
+            // It should NOT use the manual content because "PStringBase" != "AC1Legacy::PStringBase"
+            string actualContent = await File.ReadAllTextAsync(expectedFilePath);
+            Assert.DoesNotContain("// Global Manual", actualContent);
+            // Assert.Contains("// Auto-generated", actualContent); // CSharpGroupProcessor doesn't use the Source string, removing this check
+        }
+        finally
+        {
+            ManualHelpers.Helpers.Remove(globalKey);
+        }
     }
 }
