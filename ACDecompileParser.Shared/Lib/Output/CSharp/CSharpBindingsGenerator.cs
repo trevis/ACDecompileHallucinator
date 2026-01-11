@@ -38,13 +38,12 @@ public class CSharpBindingsGenerator
     /// <summary>
     /// Generates C# binding code for a list of types with namespace header.
     /// </summary>
-    /// </summary>
     public string GenerateWithNamespace(List<TypeModel> types, string namespaceName = "ACBindings")
     {
         var sb = new System.Text.StringBuilder();
 
         // Track generated type names to prevent duplicates
-        var generatedNames = new HashSet<string>();
+
 
         // Pre-processing: Group types by their intended generated name and pick the best candidate
         // This handles cases where we have both a forward declaration and a full definition in the same group.
@@ -77,6 +76,12 @@ public class CSharpBindingsGenerator
                 distinctTypes.Add(best);
             }
         }
+
+        // Link orphaned nested types (e.g. types defined in methods) to their parents
+        LinkOrphanedNestedTypes(distinctTypes);
+
+        // Remove types that are no longer roots (were linked to a parent)
+        distinctTypes = distinctTypes.Where(t => t.ParentType == null).ToList();
 
         // Group types by their Namespace
         var namespaceGroups = distinctTypes
@@ -148,7 +153,8 @@ public class CSharpBindingsGenerator
     }
 
 
-    private void GenerateType(TypeModel type, System.Text.StringBuilder sb, int indentLevel)
+    private void GenerateType(TypeModel type, System.Text.StringBuilder sb, int indentLevel,
+        TypeModel? parentType = null)
     {
         if (type.Type == TypeType.Enum)
         {
@@ -156,11 +162,11 @@ public class CSharpBindingsGenerator
         }
         else if (type.Type == TypeType.Struct || type.Type == TypeType.Class || type.Type == TypeType.Union)
         {
-            GenerateStruct(type, sb, indentLevel);
+            GenerateStruct(type, sb, indentLevel, parentType);
         }
     }
 
-    private static string GetGeneratedTypeName(TypeModel type)
+    private static string GetGeneratedTypeName(TypeModel type, TypeModel? parentType = null)
     {
         if (type.Type == TypeType.Enum)
         {
@@ -175,10 +181,36 @@ public class CSharpBindingsGenerator
             flattenedName = flattenedName.Substring(lastDot + 1);
         }
 
-        return PrimitiveTypeMappings.CleanTypeName(flattenedName);
+        string baseName = PrimitiveTypeMappings.CleanTypeName(flattenedName);
+
+        if (parentType != null)
+        {
+            string parentNs = parentType.Namespace?.Replace("::", ".") ?? "";
+            string parentBaseCtx = PrimitiveTypeMappings.CleanTypeName(parentType.BaseName);
+            string parentScope = string.IsNullOrEmpty(parentNs) ? parentBaseCtx : $"{parentNs}.{parentBaseCtx}";
+
+            string childNs = type.Namespace?.Replace("::", ".") ?? "";
+
+            if (childNs.StartsWith(parentScope, StringComparison.Ordinal))
+            {
+                string diff = childNs.Substring(parentScope.Length);
+                if (diff.StartsWith("."))
+                {
+                    diff = diff.Substring(1);
+                    if (!string.IsNullOrEmpty(diff))
+                    {
+                        string prefix = diff.Replace(".", "__").Replace("::", "__");
+                        return $"{prefix}__{baseName}";
+                    }
+                }
+            }
+        }
+
+        return baseName;
     }
 
-    private void GenerateStruct(TypeModel type, System.Text.StringBuilder sb, int indentLevel)
+    private void GenerateStruct(TypeModel type, System.Text.StringBuilder sb, int indentLevel,
+        TypeModel? parentType = null)
     {
         // ... (this method start)
         string indent = new string(' ', indentLevel * 4);
@@ -189,7 +221,7 @@ public class CSharpBindingsGenerator
         string interfaces = (hasDestructor && !type.IsGeneric) ? " : System.IDisposable" : "";
 
         // Struct declaration
-        string safeBaseName = GetGeneratedTypeName(type);
+        string safeBaseName = GetGeneratedTypeName(type, parentType);
         AppendXmlDocComment(sb, type.XmlDocComment, indent);
         sb.AppendLine($"{indent}// {type.FullyQualifiedName}");
         sb.AppendLine($"{indent}public unsafe struct {safeBaseName}{interfaces}");
@@ -254,12 +286,12 @@ public class CSharpBindingsGenerator
             var generatedNestedTypes = new HashSet<string>();
             foreach (var nested in type.NestedTypes)
             {
-                string nestedName = GetGeneratedTypeName(nested);
+                string nestedName = GetGeneratedTypeName(nested, type);
                 if (generatedNestedTypes.Contains(nestedName))
                     continue;
 
                 generatedNestedTypes.Add(nestedName);
-                GenerateType(nested, sb, indentLevel + 1);
+                GenerateType(nested, sb, indentLevel + 1, type);
             }
 
             hasContent = true;
@@ -1070,6 +1102,64 @@ public class CSharpBindingsGenerator
         foreach (var line in lines)
         {
             sb.AppendLine($"{indent}/// {line}");
+        }
+    }
+
+    private void LinkOrphanedNestedTypes(List<TypeModel> types)
+    {
+        // Build a lookup of potential parents
+        var typeLookup = new Dictionary<string, TypeModel>();
+
+        foreach (var type in types)
+        {
+            string fqn = string.IsNullOrEmpty(type.Namespace)
+                ? type.BaseName
+                : $"{type.Namespace}::{type.BaseName}";
+
+            if (!typeLookup.ContainsKey(fqn))
+            {
+                typeLookup[fqn] = type;
+            }
+        }
+
+        // Iterate through all types to find orphans
+        foreach (var type in types)
+        {
+            if (type.ParentType != null) continue; // Already parented
+
+            string ns = type.Namespace ?? string.Empty;
+            if (string.IsNullOrEmpty(ns)) continue;
+
+            // Search for longest prefix matching a known type
+            string currentNs = ns;
+            while (!string.IsNullOrEmpty(currentNs))
+            {
+                if (typeLookup.TryGetValue(currentNs, out var parent) && parent != type)
+                {
+                    // Found a parent!
+                    type.ParentType = parent;
+                    if (parent.NestedTypes == null) parent.NestedTypes = new List<TypeModel>();
+
+                    // Avoid duplicates in NestedTypes list
+                    if (!parent.NestedTypes.Any(nt => nt.Id == type.Id))
+                    {
+                        parent.NestedTypes.Add(type);
+                    }
+
+                    break;
+                }
+
+                // Strip last part of namespace
+                int lastScope = currentNs.LastIndexOf("::");
+                if (lastScope > 0)
+                {
+                    currentNs = currentNs.Substring(0, lastScope);
+                }
+                else
+                {
+                    break; // No more parents
+                }
+            }
         }
     }
 }
